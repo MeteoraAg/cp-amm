@@ -125,6 +125,22 @@ pub fn get_next_sqrt_price_from_input(
     }
 }
 
+pub fn get_next_sqrt_price_from_output(
+    sqrt_price: u128,
+    liquidity: u128,
+    amount_out: u64,
+    a_for_b: bool,
+) -> Result<u128> {
+    assert!(sqrt_price > 0);
+    assert!(liquidity > 0);
+
+    if a_for_b {
+        get_next_sqrt_price_from_exact_out_amount_b_rounding_up(sqrt_price, liquidity, amount_out)
+    } else {
+        get_next_sqrt_price_from_exact_out_amount_a_rounding_up(sqrt_price, liquidity, amount_out)
+    }
+}
+
 /// Gets the next sqrt price √P' given a delta of token_a
 ///
 /// Always round up because
@@ -193,4 +209,73 @@ pub fn get_next_sqrt_price_from_amount_b_rounding_down(
 
     let result = U256::from(sqrt_price).safe_add(quotient)?;
     Ok(result.try_into().map_err(|_| PoolError::TypeCastFailed)?)
+}
+
+/// √P' = √P * L / (L - Δx*√P)
+///
+/// Always round up to ensure the output amount is fully satisfied
+pub fn get_next_sqrt_price_from_exact_out_amount_a_rounding_up(
+    sqrt_price: u128,
+    liquidity: u128,
+    amount_out: u64,
+) -> Result<u128> {
+    if amount_out == 0 {
+        return Ok(sqrt_price);
+    }
+    let sqrt_price = U256::from(sqrt_price);
+    let liquidity = U256::from(liquidity).safe_shl(RESOLUTION.into())?;
+
+    let product = U256::from(amount_out).safe_mul(sqrt_price)?;
+
+    // Ensure we have enough liquidity to fulfill the output
+    require!(liquidity > product, PoolError::InsufficientLiquidity);
+
+    // (L << RESOLUTION) - (amount_out * sqrt_price)
+    let denominator = liquidity.safe_sub(U256::from(product))?;
+    // ((L << RESOLUTION) * sqrt_price) / denominator
+    let result = mul_div_u256(liquidity, sqrt_price, denominator, Rounding::Up)
+        .ok_or_else(|| PoolError::MathOverflow)?;
+    return Ok(result.try_into().map_err(|_| PoolError::TypeCastFailed)?);
+}
+
+/// # Formula
+///
+/// * `√P' = √P - Δy / L`
+///
+/// Always round up to ensure the output amount is fully satisfied
+pub fn get_next_sqrt_price_from_exact_out_amount_b_rounding_up(
+    sqrt_price: u128,
+    liquidity: u128,
+    amount_out: u64,
+) -> Result<u128> {
+    let amount_u256 = U256::from(amount_out);
+    let max_amount_out = calculate_max_token_b(sqrt_price, liquidity)?;
+    // amount out is larger than available liquidity
+    require!(
+        amount_u256 <= max_amount_out,
+        PoolError::InsufficientLiquidity
+    );
+
+    let quotient = amount_u256
+        .safe_shl((RESOLUTION * 2) as usize)?
+        .div_ceil(U256::from(liquidity))
+        .try_into()
+        .map_err(|_| PoolError::TypeCastFailed)?;
+
+    let result = U256::from(sqrt_price).safe_sub(quotient)?;
+    Ok(result.try_into().map_err(|_| PoolError::TypeCastFailed)?)
+}
+
+/// In case swap token A to token B. the relation between token B and sqrt_price is linear
+/// Reserve of token B decreases then the price will decrease. From formula: `Δb = L (√P_upper - √P_lower)`
+/// Then if price move to 0 (√P_lower = 0) then `max_Δb = L * √P_upper``
+/// Formula:
+/// max_amount_out = (liquidity * sqrt_price) >> (RESOLUTION * 2)
+/// Fixed-point representation:
+/// sqrt_price & liquidity already scaled by 2^64. So we need to shift right 128 bit to get amount.
+/// Always Round down to ensure enough liquidity
+fn calculate_max_token_b(sqrt_price: u128, liquidity: u128) -> Result<U256> {
+    let product = U256::from(liquidity).safe_mul(U256::from(sqrt_price))?;
+    let (max_amount_out, _) = product.overflowing_shr((RESOLUTION as usize) * 2);
+    Ok(max_amount_out)
 }

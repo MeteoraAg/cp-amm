@@ -23,7 +23,7 @@ import {
 import BN from "bn.js";
 import { BanksClient } from "solana-bankrun";
 import { DECIMALS } from "./constants";
-const rawAmount = 1_000_000 * 10 ** DECIMALS; // 1 millions
+const rawAmount = 100_000_000 * 10 ** DECIMALS; // 1 millions
 
 export async function getOrCreateAssociatedTokenAccount(
   banksClient: BanksClient,

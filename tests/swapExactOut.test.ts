@@ -1,12 +1,15 @@
-import { ProgramTestContext } from "solana-bankrun";
+import { expect } from "chai";
+import { BanksClient, ProgramTestContext } from "solana-bankrun";
 import { generateKpAndFund, randomID, startTest } from "./bankrun-utils/common";
-import { Keypair, PublicKey } from "@solana/web3.js";
+import { Keypair, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
 import {
   addLiquidity,
   AddLiquidityParams,
   createConfigIx,
   CreateConfigParams,
   createPosition,
+  getPool,
+  getPosition,
   initializePool,
   InitializePoolParams,
   MIN_LP_AMOUNT,
@@ -14,14 +17,22 @@ import {
   MIN_SQRT_PRICE,
   swap,
   SwapParams,
+  SwapExactOutParams,
+  swapExactOut,
+  U64_MAX,
+  DECIMALS,
   createToken,
   mintSplTokenTo,
 } from "./bankrun-utils";
 import BN from "bn.js";
 import { ExtensionType } from "@solana/spl-token";
+import {
+  getLiquidityDeltaFromAmountA,
+  getLiquidityDeltaFromAmountB,
+} from "./bankrun-utils/utils";
 import { createToken2022, mintToToken2022 } from "./bankrun-utils/token2022";
 
-describe("Swap token", () => {
+describe("Swap Exact Out token", () => {
   describe("SPL Token", () => {
     let context: ProgramTestContext;
     let admin: Keypair;
@@ -141,27 +152,68 @@ describe("Swap token", () => {
     });
 
     it("User swap A->B", async () => {
+      const maxAmountA = new BN(10_000_000 * 10 ** DECIMALS);
+      const maxAmountB = new BN(10_000_000 * 10 ** DECIMALS);
+
+      const liquidityDeltaFromAmountA = getLiquidityDeltaFromAmountA(
+        maxAmountA,
+        sqrtPrice,
+        MAX_SQRT_PRICE
+      );
+
+      const liquidityDeltaFromAmountB = getLiquidityDeltaFromAmountB(
+        maxAmountB,
+        MIN_SQRT_PRICE,
+        sqrtPrice
+      );
+
+      console.log({ MIN_SQRT_PRICE, sqrtPrice });
+
+      console.log({ liquidityDeltaFromAmountA, liquidityDeltaFromAmountB });
+
+      const liquidityQ64 = liquidityDeltaFromAmountA.gte(
+        liquidityDeltaFromAmountB
+      )
+        ? liquidityDeltaFromAmountB
+        : liquidityDeltaFromAmountA;
+
+      console.log(liquidityQ64);
       const addLiquidityParams: AddLiquidityParams = {
         owner: user,
         pool,
         position,
-        liquidityDelta: new BN(MIN_SQRT_PRICE.muln(30)),
-        tokenAAmountThreshold: new BN(200),
-        tokenBAmountThreshold: new BN(200),
+        liquidityDelta: liquidityQ64,
+        tokenAAmountThreshold: maxAmountA,
+        tokenBAmountThreshold: maxAmountB,
       };
+
       await addLiquidity(context.banksClient, addLiquidityParams);
 
-      const swapParams: SwapParams = {
+      // AtoB
+      const swapParams: SwapExactOutParams = {
         payer: user,
         pool,
         inputTokenMint,
         outputTokenMint,
-        amountIn: new BN(10),
-        minimumAmountOut: new BN(0),
+        amountOut: new BN(1),
+        maximumAmountIn: new BN(U64_MAX),
         referralTokenAccount: null,
       };
 
-      await swap(context.banksClient, swapParams);
+      await swapExactOut(context.banksClient, swapParams);
+
+      // BtoA
+      const swapParams2: SwapExactOutParams = {
+        payer: user,
+        pool,
+        inputTokenMint: outputTokenMint,
+        outputTokenMint: inputTokenMint,
+        amountOut: new BN(1),
+        maximumAmountIn: new BN(U64_MAX),
+        referralTokenAccount: null,
+      };
+
+      await swapExactOut(context.banksClient, swapParams2);
     });
   });
 
@@ -288,23 +340,37 @@ describe("Swap token", () => {
         owner: user,
         pool,
         position,
-        liquidityDelta: new BN(MIN_SQRT_PRICE.muln(30)),
+        liquidityDelta: new BN(MIN_SQRT_PRICE.muln(2)),
         tokenAAmountThreshold: new BN(200),
         tokenBAmountThreshold: new BN(200),
       };
       await addLiquidity(context.banksClient, addLiquidityParams);
 
-      const swapParams: SwapParams = {
+      // AtoB
+      const swapParams: SwapExactOutParams = {
         payer: user,
         pool,
         inputTokenMint,
         outputTokenMint,
-        amountIn: new BN(10),
-        minimumAmountOut: new BN(0),
+        amountOut: new BN(1),
+        maximumAmountIn: new BN(U64_MAX),
         referralTokenAccount: null,
       };
 
-      await swap(context.banksClient, swapParams);
+      await swapExactOut(context.banksClient, swapParams);
+
+      // BtoA
+      const swapParams2: SwapExactOutParams = {
+        payer: user,
+        pool,
+        inputTokenMint: outputTokenMint,
+        outputTokenMint: inputTokenMint,
+        amountOut: new BN(1),
+        maximumAmountIn: new BN(U64_MAX),
+        referralTokenAccount: null,
+      };
+
+      await swapExactOut(context.banksClient, swapParams2);
     });
   });
 });

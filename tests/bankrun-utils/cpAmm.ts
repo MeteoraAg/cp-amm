@@ -1336,8 +1336,9 @@ export async function swap(banksClient: BanksClient, params: SwapParams) {
 
   const transaction = await program.methods
     .swap({
-      amountIn,
-      minimumAmountOut,
+      amount: amountIn,
+      thresholdAmount: minimumAmountOut,
+      isSwapExactIn: true,
     })
     .accounts({
       poolAuthority,
@@ -1359,6 +1360,107 @@ export async function swap(banksClient: BanksClient, params: SwapParams) {
   transaction.sign(payer);
 
   await processTransactionMaybeThrow(banksClient, transaction);
+}
+
+export type SwapExactOutParams = {
+  payer: Keypair;
+  pool: PublicKey;
+  inputTokenMint: PublicKey;
+  outputTokenMint: PublicKey;
+  amountOut: BN;
+  maximumAmountIn: BN;
+  referralTokenAccount: PublicKey | null;
+};
+
+export async function swapExactOut(
+  banksClient: BanksClient,
+  params: SwapExactOutParams
+) {
+  const {
+    payer,
+    pool,
+    inputTokenMint,
+    outputTokenMint,
+    amountOut,
+    maximumAmountIn,
+    referralTokenAccount,
+  } = params;
+
+  const program = createCpAmmProgram();
+  const poolState = await getPool(banksClient, pool);
+
+  const poolAuthority = derivePoolAuthority();
+  const tokenAProgram = (await banksClient.getAccount(poolState.tokenAMint))
+    .owner;
+
+  const tokenBProgram = (await banksClient.getAccount(poolState.tokenBMint))
+    .owner;
+  const inputTokenAccount = getAssociatedTokenAddressSync(
+    inputTokenMint,
+    payer.publicKey,
+    true,
+    tokenAProgram
+  );
+  const outputTokenAccount = getAssociatedTokenAddressSync(
+    outputTokenMint,
+    payer.publicKey,
+    true,
+    tokenBProgram
+  );
+
+  const preOutputTokenBalance = Number(
+    AccountLayout.decode(
+      (await banksClient.getAccount(outputTokenAccount)).data
+    ).amount
+  );
+  const tokenAVault = poolState.tokenAVault;
+  const tokenBVault = poolState.tokenBVault;
+  const tokenAMint = poolState.tokenAMint;
+  const tokenBMint = poolState.tokenBMint;
+
+  const transaction = await program.methods
+    .swap({
+      amount: amountOut,
+      thresholdAmount: maximumAmountIn,
+      isSwapExactIn: false,
+    })
+    .accounts({
+      poolAuthority,
+      pool,
+      payer: payer.publicKey,
+      inputTokenAccount,
+      outputTokenAccount,
+      tokenAVault,
+      tokenBVault,
+      tokenAProgram,
+      tokenBProgram,
+      tokenAMint,
+      tokenBMint,
+      referralTokenAccount,
+    })
+    .transaction();
+
+  transaction.recentBlockhash = (await banksClient.getLatestBlockhash())[0];
+  transaction.feePayer = payer.publicKey;
+  transaction.sign(payer);
+
+  await processTransactionMaybeThrow(banksClient, transaction);
+
+  const postOutputTokenBalance = Number(
+    AccountLayout.decode(
+      (await banksClient.getAccount(outputTokenAccount)).data
+    ).amount
+  );
+
+  console.log({
+    preOutputTokenBalance,
+    postOutputTokenBalance,
+    amountOut: amountOut.toNumber(),
+  });
+
+  expect(postOutputTokenBalance - amountOut.toNumber()).eq(
+    preOutputTokenBalance
+  );
 }
 
 export type ClaimpositionFeeParams = {
