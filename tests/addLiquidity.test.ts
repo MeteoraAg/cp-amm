@@ -96,6 +96,7 @@ describe("Add liquidity", () => {
             periodFrequency: new BN(0),
             feeSchedulerMode: 0,
           },
+          maxFeeBps: new BN(5000),
           protocolFeePercent: 10,
           partnerFeePercent: 0,
           referralFeePercent: 0,
@@ -129,7 +130,6 @@ describe("Add liquidity", () => {
       };
 
       const result = await initializePool(context.banksClient, initPoolParams);
-
 
       pool = result.pool;
       position = await createPosition(
@@ -325,6 +325,7 @@ describe("Add liquidity", () => {
             periodFrequency: new BN(0),
             feeSchedulerMode: 0,
           },
+          maxFeeBps: new BN(5000),
           protocolFeePercent: 10,
           partnerFeePercent: 0,
           referralFeePercent: 0,

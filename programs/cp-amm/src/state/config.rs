@@ -18,6 +18,8 @@ use crate::{
 pub struct PoolFeesConfig {
     pub base_fee: BaseFeeConfig,
     pub dynamic_fee: DynamicFeeConfig,
+    pub max_fee_bps: u64,
+    pub max_fee_numerator: u64,
     pub protocol_fee_percent: u8,
     pub partner_fee_percent: u8,
     pub referral_fee_percent: u8,
@@ -25,7 +27,7 @@ pub struct PoolFeesConfig {
     pub padding_1: [u64; 5],
 }
 
-const_assert_eq!(PoolFeesConfig::INIT_SPACE, 128);
+const_assert_eq!(PoolFeesConfig::INIT_SPACE, 144);
 
 #[zero_copy]
 #[derive(Debug, InitSpace, Default)]
@@ -70,6 +72,7 @@ impl PoolFeesConfig {
             protocol_fee_percent,
             partner_fee_percent,
             referral_fee_percent,
+            max_fee_bps,
             dynamic_fee:
                 DynamicFeeConfig {
                     initialized,
@@ -90,6 +93,7 @@ impl PoolFeesConfig {
                 protocol_fee_percent,
                 partner_fee_percent,
                 referral_fee_percent,
+                max_fee_bps,
                 dynamic_fee: Some(DynamicFeeParameters {
                     bin_step,
                     bin_step_u128,
@@ -117,6 +121,8 @@ impl PoolFeesConfig {
             protocol_fee_percent,
             partner_fee_percent,
             referral_fee_percent,
+            max_fee_bps,
+            max_fee_numerator,
             dynamic_fee,
             ..
         } = self;
@@ -126,6 +132,8 @@ impl PoolFeesConfig {
             protocol_fee_percent,
             partner_fee_percent,
             referral_fee_percent,
+            max_fee_bps,
+            max_fee_numerator,
             dynamic_fee: dynamic_fee.to_dynamic_fee_struct(),
             ..Default::default()
         }
@@ -194,7 +202,7 @@ pub struct Config {
     pub _padding_1: [u64; 10],
 }
 
-const_assert_eq!(Config::INIT_SPACE, 320);
+const_assert_eq!(Config::INIT_SPACE, 336);
 
 pub struct BootstrappingConfig {
     pub activation_point: u64,

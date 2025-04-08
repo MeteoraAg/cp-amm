@@ -18,6 +18,7 @@ use crate::common::pda::derive_event_authority_pda;
 pub struct UpdateConfigParams {
     pub config: Pubkey,
     pub base_fee: BaseFeeParameters,
+    pub max_fee_bps: u64,
     pub protocol_fee_percent: u8,
     pub partner_fee_percent: u8,
     pub referral_fee_percent: u8,
@@ -32,6 +33,7 @@ pub fn update_config<C: Deref<Target = impl Signer> + Clone>(
     let UpdateConfigParams {
         config,
         base_fee,
+        max_fee_bps,
         protocol_fee_percent,
         partner_fee_percent,
         referral_fee_percent,
@@ -64,6 +66,7 @@ pub fn update_config<C: Deref<Target = impl Signer> + Clone>(
         protocol_fee_percent,
         partner_fee_percent,
         referral_fee_percent,
+        max_fee_bps,
         dynamic_fee: None,
     };
     let config_parameters = ConfigParameters {
