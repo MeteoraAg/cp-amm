@@ -143,7 +143,7 @@ pub struct Pool {
     pub reward_infos: [RewardInfo; NUM_REWARDS],
 }
 
-const_assert_eq!(Pool::INIT_SPACE, 1104);
+const_assert_eq!(Pool::INIT_SPACE, 1120);
 
 #[zero_copy]
 #[derive(Debug, InitSpace, Default)]

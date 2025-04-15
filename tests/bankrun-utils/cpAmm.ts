@@ -113,6 +113,7 @@ export type PoolFees = {
   protocolFeePercent: number;
   partnerFeePercent: number;
   referralFeePercent: number;
+  maxFeeBps: BN;
   dynamicFee: DynamicFee | null;
 };
 
@@ -560,6 +561,7 @@ export type PoolFeesParams = {
   protocolFeePercent: number;
   partnerFeePercent: number;
   referralFeePercent: number;
+  maxFeeBps: BN;
   dynamicFee: DynamicFee | null;
 };
 
@@ -1275,7 +1277,6 @@ export async function removeLiquidity(
   await processTransactionMaybeThrow(banksClient, transaction);
 }
 
-
 export type RemoveAllLiquidityParams = {
   owner: Keypair;
   pool: PublicKey;
@@ -1286,7 +1287,7 @@ export type RemoveAllLiquidityParams = {
 
 export async function removeAllLiquidity(
   banksClient: BanksClient,
-  params: RemoveAllLiquidityParams,
+  params: RemoveAllLiquidityParams
 ) {
   const {
     owner,
@@ -1325,10 +1326,7 @@ export async function removeAllLiquidity(
   const tokenBMint = poolState.tokenBMint;
 
   const transaction = await program.methods
-    .removeAllLiquidity(
-      tokenAAmountThreshold,
-      tokenBAmountThreshold,
-    )
+    .removeAllLiquidity(tokenAAmountThreshold, tokenBAmountThreshold)
     .accounts({
       poolAuthority,
       pool,
