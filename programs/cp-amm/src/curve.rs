@@ -108,20 +108,29 @@ pub fn get_delta_amount_b_unsigned_unchecked(
 
 /// Gets the next sqrt price given an input amount of token_a or token_b
 /// Throws if price or liquidity are 0, or if the next price is out of bounds
-pub fn get_next_sqrt_price_from_input(
+pub fn get_next_sqrt_price(
     sqrt_price: u128,
     liquidity: u128,
-    amount_in: u64,
+    amount: u64,
     a_for_b: bool,
+    is_swap_exact_out: bool,
 ) -> Result<u128> {
     assert!(sqrt_price > 0);
     assert!(liquidity > 0);
 
-    // round to make sure that we don't pass the target price
-    if a_for_b {
-        get_next_sqrt_price_from_amount_a_rounding_up(sqrt_price, liquidity, amount_in)
+    if is_swap_exact_out {
+        if a_for_b {
+            get_next_sqrt_price_from_exact_out_amount_b_rounding_down(sqrt_price, liquidity, amount)
+        } else {
+            get_next_sqrt_price_from_exact_out_amount_a_rounding_up(sqrt_price, liquidity, amount)
+        }
     } else {
-        get_next_sqrt_price_from_amount_b_rounding_down(sqrt_price, liquidity, amount_in)
+        // round to make sure that we don't pass the target price
+        if a_for_b {
+            get_next_sqrt_price_from_amount_a_rounding_up(sqrt_price, liquidity, amount)
+        } else {
+            get_next_sqrt_price_from_amount_b_rounding_down(sqrt_price, liquidity, amount)
+        }
     }
 }
 
@@ -195,5 +204,45 @@ pub fn get_next_sqrt_price_from_amount_b_rounding_down(
         .safe_div(U256::from(liquidity))?;
 
     let result = U256::from(sqrt_price).safe_add(quotient)?;
+    Ok(result.try_into().map_err(|_| PoolError::TypeCastFailed)?)
+}
+
+/// √P' = √P * L / (L - Δx*√P)
+///
+pub fn get_next_sqrt_price_from_exact_out_amount_a_rounding_up(
+    sqrt_price: u128,
+    liquidity: u128,
+    amount_out: u64,
+) -> Result<u128> {
+    if amount_out == 0 {
+        return Ok(sqrt_price);
+    }
+    let sqrt_price = U256::from(sqrt_price);
+    let liquidity = U256::from(liquidity);
+
+    let product = U256::from(amount_out).safe_mul(sqrt_price)?;
+    let denominator = liquidity.safe_sub(U256::from(product))?;
+    let result = mul_div_u256(liquidity, sqrt_price, denominator, Rounding::Up)
+        .ok_or_else(|| PoolError::MathOverflow)?;
+    return Ok(result.try_into().map_err(|_| PoolError::TypeCastFailed)?);
+}
+
+/// # Formula
+///
+/// * `√P' = √P - Δy / L`
+///
+pub fn get_next_sqrt_price_from_exact_out_amount_b_rounding_down(
+    sqrt_price: u128,
+    liquidity: u128,
+    amount_out: u64,
+) -> Result<u128> {
+    let amount_u256 = U256::from(amount_out);
+    let quotient = amount_u256
+        .safe_shl((RESOLUTION * 2) as usize)?
+        .div_ceil(U256::from(liquidity))
+        .try_into()
+        .map_err(|_| PoolError::TypeCastFailed)?;
+
+    let result = U256::from(sqrt_price).safe_sub(quotient)?;
     Ok(result.try_into().map_err(|_| PoolError::TypeCastFailed)?)
 }

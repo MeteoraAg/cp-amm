@@ -1275,7 +1275,6 @@ export async function removeLiquidity(
   await processTransactionMaybeThrow(banksClient, transaction);
 }
 
-
 export type RemoveAllLiquidityParams = {
   owner: Keypair;
   pool: PublicKey;
@@ -1286,7 +1285,7 @@ export type RemoveAllLiquidityParams = {
 
 export async function removeAllLiquidity(
   banksClient: BanksClient,
-  params: RemoveAllLiquidityParams,
+  params: RemoveAllLiquidityParams
 ) {
   const {
     owner,
@@ -1325,10 +1324,7 @@ export async function removeAllLiquidity(
   const tokenBMint = poolState.tokenBMint;
 
   const transaction = await program.methods
-    .removeAllLiquidity(
-      tokenAAmountThreshold,
-      tokenBAmountThreshold,
-    )
+    .removeAllLiquidity(tokenAAmountThreshold, tokenBAmountThreshold)
     .accounts({
       poolAuthority,
       pool,
@@ -1352,28 +1348,22 @@ export async function removeAllLiquidity(
   await processTransactionMaybeThrow(banksClient, transaction);
 }
 
-
 export async function closePosition(
   banksClient: BanksClient,
   params: {
     owner: Keypair;
     pool: PublicKey;
     position: PublicKey;
-  },
+  }
 ) {
-  const {
-    owner,
-    pool,
-    position,
-  } = params;
+  const { owner, pool, position } = params;
   const program = createCpAmmProgram();
   const positionState = await getPosition(banksClient, position);
   const poolAuthority = derivePoolAuthority();
   const positionNftAccount = derivePositionNftAccount(positionState.nftMint);
 
   const transaction = await program.methods
-    .closePosition(
-  )
+    .closePosition()
     .accountsPartial({
       positionNftMint: positionState.nftMint,
       positionNftAccount,
@@ -1382,7 +1372,6 @@ export async function closePosition(
       poolAuthority,
       rentReceiver: owner.publicKey,
       owner: owner.publicKey,
-
     })
     .transaction();
 
@@ -1441,8 +1430,9 @@ export async function swap(banksClient: BanksClient, params: SwapParams) {
 
   const transaction = await program.methods
     .swap({
-      amountIn,
-      minimumAmountOut,
+      amount: amountIn,
+      thresholdAmount: minimumAmountOut,
+      isSwapExactOut: false,
     })
     .accounts({
       poolAuthority,

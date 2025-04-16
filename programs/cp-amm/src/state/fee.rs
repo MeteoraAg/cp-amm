@@ -162,6 +162,7 @@ impl PoolFeesStruct {
         has_referral: bool,
         current_point: u64,
         activation_point: u64,
+        is_swap_exact_out: bool,
     ) -> Result<FeeOnAmountResult> {
         let trade_fee_numerator = self.get_total_trading_fee(current_point, activation_point)?;
         let trade_fee_numerator = if trade_fee_numerator > MAX_FEE_NUMERATOR.into() {
@@ -169,10 +170,26 @@ impl PoolFeesStruct {
         } else {
             trade_fee_numerator.try_into().unwrap()
         };
-        let lp_fee: u64 =
-            safe_mul_div_cast_u64(amount, trade_fee_numerator, FEE_DENOMINATOR, Rounding::Up)?;
-        // update amount
-        let amount = amount.safe_sub(lp_fee)?;
+
+        let (amount_calculated_fee, lp_fee) = if is_swap_exact_out {
+            let amount_included_lp_fee: u64 = safe_mul_div_cast_u64(
+                amount,
+                FEE_DENOMINATOR,
+                FEE_DENOMINATOR.safe_sub(trade_fee_numerator)?,
+                Rounding::Up,
+            )?;
+
+            let lp_fee = amount_included_lp_fee.safe_sub(amount)?;
+
+            (amount_included_lp_fee, lp_fee)
+        } else {
+            let lp_fee: u64 =
+                safe_mul_div_cast_u64(amount, trade_fee_numerator, FEE_DENOMINATOR, Rounding::Up)?;
+            // update amount
+            let amount = amount.safe_sub(lp_fee)?;
+
+            (amount, lp_fee)
+        };
 
         let protocol_fee = safe_mul_div_cast_u64(
             lp_fee,
@@ -205,7 +222,7 @@ impl PoolFeesStruct {
         let protocol_fee = protocol_fee_after_referral_fee.safe_sub(partner_fee)?;
 
         Ok(FeeOnAmountResult {
-            amount,
+            amount: amount_calculated_fee,
             lp_fee,
             protocol_fee,
             partner_fee,

@@ -10,6 +10,8 @@ env:
   SOLANA_CLI_VERSION: 2.1.0
   NODE_VERSION: 18.20.6
   ANCHOR_CLI_VERSION: 0.31.0
+  PROC_MACRO2_VERSION: 1.0.94
+  NIGHTLY_TOOLCHAIN: nightly-2025-04-14
 
 jobs:
   program_changed_files:
@@ -38,6 +40,11 @@ jobs:
       - uses: ./.github/actions/setup-solana
       - uses: ./.github/actions/setup-dep
       - uses: ./.github/actions/setup-anchor
+      # proc-macro2 version
+      - name: Pin proc-macro2 version
+        run: |
+          cargo update -p proc-macro2 --precise ${{ env.PROC_MACRO2_VERSION }}
+        shell: bash
        # Cache rust, cargo
       - uses: Swatinem/rust-cache@v2
         with:
@@ -47,7 +54,7 @@ jobs:
         with:
           path: ~/.anchor
           key: anchor-${{ runner.os }}-${{ hashFiles('Anchor.toml') }}
-      - run: anchor build
+      - run: anchor build --no-idl
         shell: bash
 
   cli_build:
@@ -97,8 +104,13 @@ jobs:
       # Install rust + toolchain
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: ${{ env.NIGHTLY_TOOLCHAIN }}
           components: clippy
+      # proc-macro2 version
+      - name: Pin proc-macro2 version
+        run: |
+          cargo update -p proc-macro2 --precise ${{ env.PROC_MACRO2_VERSION }}
+        shell: bash
       # Cache rust, cargo
       - uses: Swatinem/rust-cache@v1
       # Cache node_modules
@@ -110,5 +122,5 @@ jobs:
       # Testing
       - run: pnpm install
         shell: bash
-      - run: pnpm test
+      - run: RUSTUP_TOOLCHAIN=${{ env.NIGHTLY_TOOLCHAIN }} pnpm test
         shell: bash

@@ -64,8 +64,13 @@ fn get_internal_quote(
 
     let fee_mode = &FeeMode::get_fee_mode(pool.collect_fee_mode, trade_direction, has_referral)?;
 
-    let swap_result =
-        pool.get_swap_result(actual_amount_in, fee_mode, trade_direction, current_point)?;
+    let swap_result = pool.get_swap_result(
+        actual_amount_in,
+        fee_mode,
+        trade_direction,
+        current_point,
+        false,
+    )?;
 
     Ok(swap_result)
 }
