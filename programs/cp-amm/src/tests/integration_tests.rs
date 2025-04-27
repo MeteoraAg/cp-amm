@@ -208,9 +208,10 @@ fn execute_swap_liquidity(
         return false;
     }
     let fee_mode =
-        &FeeMode::get_fee_mode(pool.collect_fee_mode, trade_direction, has_referral).unwrap();
+        &FeeMode::get_fee_mode(pool.collect_fee_mode, trade_direction, has_referral, false)
+            .unwrap();
     let swap_result = pool
-        .get_swap_result(amount_in, fee_mode, trade_direction, 0)
+        .get_swap_result(amount_in, fee_mode, trade_direction, 0, false)
         .unwrap();
 
     pool.apply_swap_result(&swap_result, fee_mode, 0).unwrap();

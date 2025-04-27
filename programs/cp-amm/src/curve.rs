@@ -119,9 +119,25 @@ pub fn get_next_sqrt_price_from_input(
 
     // round to make sure that we don't pass the target price
     if a_for_b {
-        get_next_sqrt_price_from_amount_a_rounding_up(sqrt_price, liquidity, amount_in)
+        get_next_sqrt_price_from_amount_a_rounding_up(sqrt_price, liquidity, amount_in, false)
     } else {
-        get_next_sqrt_price_from_amount_b_rounding_down(sqrt_price, liquidity, amount_in)
+        get_next_sqrt_price_from_amount_b_rounding_down(sqrt_price, liquidity, amount_in, false)
+    }
+}
+
+pub fn get_next_sqrt_price_from_output(
+    sqrt_price: u128,
+    liquidity: u128,
+    amount_out: u64,
+    a_for_b: bool,
+) -> Result<u128> {
+    assert!(sqrt_price > 0);
+    assert!(liquidity > 0);
+
+    if a_for_b {
+        get_next_sqrt_price_from_amount_b_rounding_down(sqrt_price, liquidity, amount_out, true)
+    } else {
+        get_next_sqrt_price_from_amount_a_rounding_up(sqrt_price, liquidity, amount_out, true)
     }
 }
 
@@ -151,12 +167,14 @@ pub fn get_next_sqrt_price_from_input(
 ///  (x + Δx) * √P' = x * √P
 ///  √P' = (x * √P) / (x + Δx)
 ///  x = L/√P
-///  √P' = √P * L / (L + Δx * √P)
+///  exact in: √P' = √P * L / (L + Δx * √P)
+///  exact out: √P' = √P * L / (L - Δx * √P)
 ///
 pub fn get_next_sqrt_price_from_amount_a_rounding_up(
     sqrt_price: u128,
     liquidity: u128,
     amount: u64,
+    is_exact_out: bool,
 ) -> Result<u128> {
     if amount == 0 {
         return Ok(sqrt_price);
@@ -165,7 +183,11 @@ pub fn get_next_sqrt_price_from_amount_a_rounding_up(
     let liquidity = U256::from(liquidity);
 
     let product = U256::from(amount).safe_mul(sqrt_price)?;
-    let denominator = liquidity.safe_add(U256::from(product))?;
+    let denominator = if is_exact_out {
+        liquidity.safe_sub(U256::from(product))?
+    } else {
+        liquidity.safe_add(U256::from(product))?
+    };
     let result = mul_div_u256(liquidity, sqrt_price, denominator, Rounding::Up)
         .ok_or_else(|| PoolError::MathOverflow)?;
     return Ok(result.try_into().map_err(|_| PoolError::TypeCastFailed)?);
@@ -183,17 +205,30 @@ pub fn get_next_sqrt_price_from_amount_a_rounding_up(
 ///
 /// # Formula
 ///
-/// * `√P' = √P + Δy / L`
+/// exact in: `√P' = √P + Δy / L`
+/// exact out: `√P' = √P - Δy / L`
 ///
 pub fn get_next_sqrt_price_from_amount_b_rounding_down(
     sqrt_price: u128,
     liquidity: u128,
     amount: u64,
+    is_exact_out: bool,
 ) -> Result<u128> {
-    let quotient = U256::from(amount)
-        .safe_shl((RESOLUTION * 2) as usize)?
-        .safe_div(U256::from(liquidity))?;
+    let result = if is_exact_out {
+        let quotient = U256::from(amount)
+            .safe_shl((RESOLUTION * 2) as usize)?
+            .div_ceil(U256::from(liquidity))
+            .try_into()
+            .map_err(|_| PoolError::TypeCastFailed)?;
 
-    let result = U256::from(sqrt_price).safe_add(quotient)?;
+        U256::from(sqrt_price).safe_sub(quotient)?
+    } else {
+        let quotient = U256::from(amount)
+            .safe_shl((RESOLUTION * 2) as usize)?
+            .safe_div(U256::from(liquidity))?;
+
+        U256::from(sqrt_price).safe_add(quotient)?
+    };
+
     Ok(result.try_into().map_err(|_| PoolError::TypeCastFailed)?)
 }

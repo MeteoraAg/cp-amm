@@ -7,14 +7,18 @@ use crate::{
     get_pool_access_validator,
     params::swap::TradeDirection,
     state::{fee::FeeMode, Pool},
-    token::{calculate_transfer_fee_excluded_amount, transfer_from_pool, transfer_from_user},
+    token::{
+        calculate_transfer_fee_excluded_amount, calculate_transfer_fee_included_amount,
+        transfer_from_pool, transfer_from_user,
+    },
     EvtSwap, PoolError,
 };
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct SwapParameters {
-    amount_in: u64,
-    minimum_amount_out: u64,
+    amount: u64,
+    threshold_amount: u64,
+    is_swap_exact_out: bool,
 }
 
 #[event_cpi]
@@ -79,7 +83,6 @@ impl<'info> SwapCtx<'info> {
     }
 }
 
-// TODO impl swap exact out
 pub fn handle_swap(ctx: Context<SwapCtx>, params: SwapParameters) -> Result<()> {
     {
         let pool = ctx.accounts.pool.load()?;
@@ -91,8 +94,9 @@ pub fn handle_swap(ctx: Context<SwapCtx>, params: SwapParameters) -> Result<()> 
     }
 
     let SwapParameters {
-        amount_in,
-        minimum_amount_out,
+        amount,
+        threshold_amount,
+        is_swap_exact_out,
     } = params;
 
     let trade_direction = ctx.accounts.get_trade_direction();
@@ -122,10 +126,13 @@ pub fn handle_swap(ctx: Context<SwapCtx>, params: SwapParameters) -> Result<()> 
         ),
     };
 
-    let transfer_fee_excluded_amount_in =
-        calculate_transfer_fee_excluded_amount(&token_in_mint, amount_in)?.amount;
+    let amount_specified = if is_swap_exact_out {
+        calculate_transfer_fee_included_amount(&token_out_mint, amount)?.amount
+    } else {
+        calculate_transfer_fee_excluded_amount(&token_in_mint, amount)?.amount
+    };
 
-    require!(transfer_fee_excluded_amount_in > 0, PoolError::AmountIsZero);
+    require!(amount_specified > 0, PoolError::AmountIsZero);
 
     let has_referral = ctx.accounts.referral_token_account.is_some();
 
@@ -136,21 +143,46 @@ pub fn handle_swap(ctx: Context<SwapCtx>, params: SwapParameters) -> Result<()> 
     pool.update_pre_swap(current_timestamp)?;
 
     let current_point = ActivationHandler::get_current_point(pool.activation_type)?;
-    let fee_mode = &FeeMode::get_fee_mode(pool.collect_fee_mode, trade_direction, has_referral)?;
+    let fee_mode = &FeeMode::get_fee_mode(
+        pool.collect_fee_mode,
+        trade_direction,
+        has_referral,
+        is_swap_exact_out,
+    )?;
 
     let swap_result = pool.get_swap_result(
-        transfer_fee_excluded_amount_in,
+        amount_specified,
         fee_mode,
         trade_direction,
         current_point,
+        is_swap_exact_out,
     )?;
 
-    let transfer_fee_excluded_amount_out =
-        calculate_transfer_fee_excluded_amount(&token_out_mint, swap_result.output_amount)?.amount;
-    require!(
-        transfer_fee_excluded_amount_out >= minimum_amount_out,
-        PoolError::ExceededSlippage
-    );
+    let (input_amount_specified, output_amount_specified) = if is_swap_exact_out {
+        let input_amount_included_transfer_fee =
+            calculate_transfer_fee_included_amount(&token_in_mint, swap_result.input_amount)?
+                .amount;
+
+        // validate slippgae
+        require!(
+            input_amount_included_transfer_fee <= threshold_amount,
+            PoolError::ExceededSlippage
+        );
+
+        (input_amount_included_transfer_fee, amount_specified)
+    } else {
+        let output_amount_excluded_fee =
+            calculate_transfer_fee_excluded_amount(&token_out_mint, swap_result.output_amount)?
+                .amount;
+
+        // validate slippgae
+        require!(
+            output_amount_excluded_fee >= threshold_amount,
+            PoolError::ExceededSlippage
+        );
+
+        (amount, swap_result.output_amount)
+    };
 
     pool.apply_swap_result(&swap_result, fee_mode, current_timestamp)?;
 
@@ -161,7 +193,7 @@ pub fn handle_swap(ctx: Context<SwapCtx>, params: SwapParameters) -> Result<()> 
         &ctx.accounts.input_token_account,
         &input_vault_account,
         input_program,
-        amount_in,
+        input_amount_specified,
     )?;
     // send to user
     transfer_from_pool(
@@ -170,7 +202,7 @@ pub fn handle_swap(ctx: Context<SwapCtx>, params: SwapParameters) -> Result<()> 
         &output_vault_account,
         &ctx.accounts.output_token_account,
         output_program,
-        swap_result.output_amount,
+        output_amount_specified,
         ctx.bumps.pool_authority,
     )?;
     // send to referral
@@ -204,7 +236,7 @@ pub fn handle_swap(ctx: Context<SwapCtx>, params: SwapParameters) -> Result<()> 
         params,
         swap_result,
         has_referral,
-        actual_amount_in: transfer_fee_excluded_amount_in,
+        actual_amount_in: input_amount_specified,
         current_timestamp,
     });
 

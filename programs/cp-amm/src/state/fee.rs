@@ -162,6 +162,7 @@ impl PoolFeesStruct {
         has_referral: bool,
         current_point: u64,
         activation_point: u64,
+        is_swap_exact_out: bool,
     ) -> Result<FeeOnAmountResult> {
         let trade_fee_numerator = self.get_total_trading_fee(current_point, activation_point)?;
         let trade_fee_numerator = if trade_fee_numerator > MAX_FEE_NUMERATOR.into() {
@@ -169,10 +170,27 @@ impl PoolFeesStruct {
         } else {
             trade_fee_numerator.try_into().unwrap()
         };
-        let lp_fee: u64 =
-            safe_mul_div_cast_u64(amount, trade_fee_numerator, FEE_DENOMINATOR, Rounding::Up)?;
-        // update amount
-        let amount = amount.safe_sub(lp_fee)?;
+
+        let (amount_calculated_fee, lp_fee) = if is_swap_exact_out {
+            // amount = amount_included_lp_fee - amount_included_lp_fee * trade_fee_numerator / denominator
+            let amount_included_lp_fee: u64 = safe_mul_div_cast_u64(
+                amount,
+                FEE_DENOMINATOR,
+                FEE_DENOMINATOR.safe_sub(trade_fee_numerator)?,
+                Rounding::Up,
+            )?;
+
+            let lp_fee = amount_included_lp_fee.safe_sub(amount)?;
+
+            (amount_included_lp_fee, lp_fee)
+        } else {
+            let lp_fee: u64 =
+                safe_mul_div_cast_u64(amount, trade_fee_numerator, FEE_DENOMINATOR, Rounding::Up)?;
+            // update amount
+            let amount = amount.safe_sub(lp_fee)?;
+
+            (amount, lp_fee)
+        };
 
         let protocol_fee = safe_mul_div_cast_u64(
             lp_fee,
@@ -205,7 +223,7 @@ impl PoolFeesStruct {
         let protocol_fee = protocol_fee_after_referral_fee.safe_sub(partner_fee)?;
 
         Ok(FeeOnAmountResult {
-            amount,
+            amount: amount_calculated_fee,
             lp_fee,
             protocol_fee,
             partner_fee,
@@ -333,11 +351,12 @@ impl FeeMode {
         collect_fee_mode: u8,
         trade_direction: TradeDirection,
         has_referral: bool,
+        is_swap_exact_out: bool,
     ) -> Result<FeeMode> {
         let collect_fee_mode = CollectFeeMode::try_from(collect_fee_mode)
             .map_err(|_| PoolError::InvalidCollectFeeMode)?;
 
-        let (fees_on_input, fees_on_token_a) = match (collect_fee_mode, trade_direction) {
+        let (mut fees_on_input, fees_on_token_a) = match (collect_fee_mode, trade_direction) {
             // When collecting fees on output token
             (CollectFeeMode::BothToken, TradeDirection::AtoB) => (false, false),
             (CollectFeeMode::BothToken, TradeDirection::BtoA) => (false, true),
@@ -346,6 +365,10 @@ impl FeeMode {
             (CollectFeeMode::OnlyB, TradeDirection::AtoB) => (false, false),
             (CollectFeeMode::OnlyB, TradeDirection::BtoA) => (true, false),
         };
+
+        if is_swap_exact_out {
+            fees_on_input = !fees_on_input
+        }
 
         Ok(FeeMode {
             fees_on_input,
@@ -363,9 +386,13 @@ mod tests {
 
     #[test]
     fn test_fee_mode_output_token_a_to_b() {
-        let fee_mode =
-            FeeMode::get_fee_mode(CollectFeeMode::BothToken as u8, TradeDirection::AtoB, false)
-                .unwrap();
+        let fee_mode = FeeMode::get_fee_mode(
+            CollectFeeMode::BothToken as u8,
+            TradeDirection::AtoB,
+            false,
+            false,
+        )
+        .unwrap();
 
         assert_eq!(fee_mode.fees_on_input, false);
         assert_eq!(fee_mode.fees_on_token_a, false);
@@ -374,9 +401,13 @@ mod tests {
 
     #[test]
     fn test_fee_mode_output_token_b_to_a() {
-        let fee_mode =
-            FeeMode::get_fee_mode(CollectFeeMode::BothToken as u8, TradeDirection::BtoA, true)
-                .unwrap();
+        let fee_mode = FeeMode::get_fee_mode(
+            CollectFeeMode::BothToken as u8,
+            TradeDirection::BtoA,
+            true,
+            false,
+        )
+        .unwrap();
 
         assert_eq!(fee_mode.fees_on_input, false);
         assert_eq!(fee_mode.fees_on_token_a, true);
@@ -385,9 +416,13 @@ mod tests {
 
     #[test]
     fn test_fee_mode_quote_token_a_to_b() {
-        let fee_mode =
-            FeeMode::get_fee_mode(CollectFeeMode::OnlyB as u8, TradeDirection::AtoB, false)
-                .unwrap();
+        let fee_mode = FeeMode::get_fee_mode(
+            CollectFeeMode::OnlyB as u8,
+            TradeDirection::AtoB,
+            false,
+            false,
+        )
+        .unwrap();
 
         assert_eq!(fee_mode.fees_on_input, false);
         assert_eq!(fee_mode.fees_on_token_a, false);
@@ -396,8 +431,13 @@ mod tests {
 
     #[test]
     fn test_fee_mode_quote_token_b_to_a() {
-        let fee_mode =
-            FeeMode::get_fee_mode(CollectFeeMode::OnlyB as u8, TradeDirection::BtoA, true).unwrap();
+        let fee_mode = FeeMode::get_fee_mode(
+            CollectFeeMode::OnlyB as u8,
+            TradeDirection::BtoA,
+            true,
+            false,
+        )
+        .unwrap();
 
         assert_eq!(fee_mode.fees_on_input, true);
         assert_eq!(fee_mode.fees_on_token_a, false);
@@ -409,6 +449,7 @@ mod tests {
         let result = FeeMode::get_fee_mode(
             2, // Invalid mode
             TradeDirection::BtoA,
+            false,
             false,
         );
 
@@ -428,14 +469,23 @@ mod tests {
     #[test]
     fn test_fee_mode_properties() {
         // When trading BaseToQuote, fees should never be on input
-        let fee_mode =
-            FeeMode::get_fee_mode(CollectFeeMode::OnlyB as u8, TradeDirection::AtoB, true).unwrap();
+        let fee_mode = FeeMode::get_fee_mode(
+            CollectFeeMode::OnlyB as u8,
+            TradeDirection::AtoB,
+            true,
+            false,
+        )
+        .unwrap();
         assert_eq!(fee_mode.fees_on_input, false);
 
         // When using QuoteToken mode, base_token should always be false
-        let fee_mode =
-            FeeMode::get_fee_mode(CollectFeeMode::OnlyB as u8, TradeDirection::BtoA, false)
-                .unwrap();
+        let fee_mode = FeeMode::get_fee_mode(
+            CollectFeeMode::OnlyB as u8,
+            TradeDirection::BtoA,
+            false,
+            false,
+        )
+        .unwrap();
         assert_eq!(fee_mode.fees_on_token_a, false);
     }
 }
