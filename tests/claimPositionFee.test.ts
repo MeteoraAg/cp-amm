@@ -85,7 +85,6 @@ describe("Claim position fee", () => {
 
     // create config
     const createConfigParams: CreateConfigParams = {
-      index: new BN(configId),
       poolFees: {
         baseFee: {
           cliffFeeNumerator: new BN(2_500_000),
@@ -110,6 +109,7 @@ describe("Claim position fee", () => {
     config = await createConfigIx(
       context.banksClient,
       admin,
+      new BN(configId),
       createConfigParams
     );
 

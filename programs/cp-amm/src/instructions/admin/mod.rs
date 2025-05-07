@@ -1,5 +1,7 @@
-pub mod ix_create_config;
-pub use ix_create_config::*;
+pub mod ix_create_static_config;
+pub use ix_create_static_config::*;
+pub mod ix_create_dynamic_config;
+pub use ix_create_dynamic_config::*;
 pub mod ix_close_config;
 pub use ix_close_config::*;
 pub mod auth;

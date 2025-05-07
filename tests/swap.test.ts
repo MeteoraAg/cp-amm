@@ -88,7 +88,6 @@ describe("Swap token", () => {
 
       // create config
       const createConfigParams: CreateConfigParams = {
-        index: new BN(randomID()),
         poolFees: {
           baseFee: {
             cliffFeeNumerator: new BN(2_500_000),
@@ -113,6 +112,7 @@ describe("Swap token", () => {
       config = await createConfigIx(
         context.banksClient,
         admin,
+        new BN(randomID()),
         createConfigParams
       );
 
@@ -231,7 +231,6 @@ describe("Swap token", () => {
 
       // create config
       const createConfigParams: CreateConfigParams = {
-        index: new BN(randomID()),
         poolFees: {
           baseFee: {
             cliffFeeNumerator: new BN(2_500_000),
@@ -256,6 +255,7 @@ describe("Swap token", () => {
       config = await createConfigIx(
         context.banksClient,
         admin,
+        new BN(randomID()),
         createConfigParams
       );
 

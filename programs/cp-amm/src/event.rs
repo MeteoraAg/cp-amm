@@ -15,7 +15,7 @@ pub struct EvtCloseConfig {
     pub admin: Pubkey,
 }
 
-/// Create config
+/// Create static config
 #[event]
 pub struct EvtCreateConfig {
     pub pool_fees: PoolFeeParameters,
@@ -27,6 +27,14 @@ pub struct EvtCreateConfig {
     pub collect_fee_mode: u8,
     pub index: u64,
     pub config: Pubkey,
+}
+
+/// Create dynamic config
+#[event]
+pub struct EvtCreateDynamicConfig {
+    pub config: Pubkey,
+    pub pool_creator_authority: Pubkey,
+    pub index: u64,
 }
 
 /// Create token badge

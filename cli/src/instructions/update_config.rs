@@ -7,10 +7,10 @@ use anchor_lang::InstructionData;
 use anchor_lang::ToAccountMetas;
 use anyhow::*;
 
-use cp_amm::instruction;
+use cp_amm::accounts;
 use cp_amm::params::fee_parameters::{BaseFeeParameters, PoolFeeParameters};
 use cp_amm::state::Config;
-use cp_amm::{accounts, ConfigParameters};
+use cp_amm::{instruction, StaticConfigParameters};
 
 use crate::common::pda::derive_event_authority_pda;
 
@@ -66,7 +66,7 @@ pub fn update_config<C: Deref<Target = impl Signer> + Clone>(
         referral_fee_percent,
         dynamic_fee: None,
     };
-    let config_parameters = ConfigParameters {
+    let config_parameters = StaticConfigParameters {
         pool_fees,
         vault_config_key: config_state.vault_config_key,
         pool_creator_authority: config_state.pool_creator_authority,
@@ -74,10 +74,13 @@ pub fn update_config<C: Deref<Target = impl Signer> + Clone>(
         sqrt_min_price: config_state.sqrt_min_price,
         sqrt_max_price: config_state.sqrt_max_price,
         collect_fee_mode: config_state.collect_fee_mode,
-        index: config_state.index,
     };
 
-    let create_config_data = (instruction::CreateConfig { config_parameters }).data();
+    let create_config_data = (instruction::CreateConfig {
+        index: config_state.index,
+        config_parameters,
+    })
+    .data();
 
     let create_config_accounts = (accounts::CreateConfigCtx {
         config,

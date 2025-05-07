@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 use static_assertions::const_assert_eq;
 
 use crate::{
@@ -12,6 +13,27 @@ use crate::{
     safe_math::SafeMath,
     state::fee::{BaseFeeStruct, DynamicFeeStruct, PoolFeesStruct},
 };
+
+/// collect fee mode
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    IntoPrimitive,
+    TryFromPrimitive,
+    AnchorDeserialize,
+    AnchorSerialize,
+    Default,
+)]
+pub enum ConfigType {
+    /// In the static config type, initialized pool will take parameters from config state
+    #[default]
+    Static,
+    /// In dynamic config type, pool creator can define customizable parameters, that mode is only available for private config
+    Dynamic,
+}
 
 #[zero_copy]
 #[derive(Debug, InitSpace, Default)]
@@ -181,8 +203,10 @@ pub struct Config {
     pub activation_type: u8,
     /// Collect fee mode
     pub collect_fee_mode: u8,
+    /// Config type mode, 0 for static, 1 for dynamic
+    pub config_type: u8,
     /// padding 0
-    pub _padding_0: [u8; 6],
+    pub _padding_0: [u8; 5],
     /// config index
     pub index: u64,
     /// sqrt min price
@@ -245,7 +269,7 @@ pub fn get_timing_constraint_by_activation_type(
 }
 
 impl Config {
-    pub fn init(
+    pub fn init_static_config(
         &mut self,
         index: u64,
         pool_fees: &PoolFeeParameters,
@@ -264,6 +288,19 @@ impl Config {
         self.sqrt_min_price = sqrt_min_price;
         self.sqrt_max_price = sqrt_max_price;
         self.collect_fee_mode = collect_fee_mode;
+        self.config_type = ConfigType::Static.into();
+    }
+
+    pub fn get_config_type(&self) -> Result<ConfigType> {
+        let config_type =
+            ConfigType::try_from(self.config_type).map_err(|_| PoolError::TypeCastFailed)?;
+        Ok(config_type)
+    }
+
+    pub fn init_dynamic_config(&mut self, index: u64, pool_creator_authority: Pubkey) {
+        self.index = index;
+        self.pool_creator_authority = pool_creator_authority;
+        self.config_type = ConfigType::Dynamic.into();
     }
 
     pub fn to_bootstrapping_config(&self, activation_point: u64) -> BootstrappingConfig {

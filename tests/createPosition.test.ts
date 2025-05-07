@@ -67,7 +67,6 @@ describe("Create position", () => {
     it("User create a position", async () => {
       // create config
       const createConfigParams: CreateConfigParams = {
-        index: new BN(randomID()),
         poolFees: {
           baseFee: {
             cliffFeeNumerator: new BN(2_500_000),
@@ -92,6 +91,7 @@ describe("Create position", () => {
       const config = await createConfigIx(
         context.banksClient,
         admin,
+        new BN(randomID()),
         createConfigParams
       );
 
@@ -166,7 +166,6 @@ describe("Create position", () => {
     it("User create a position", async () => {
       // create config
       const createConfigParams: CreateConfigParams = {
-        index: new BN(randomID()),
         poolFees: {
           baseFee: {
             cliffFeeNumerator: new BN(2_500_000),
@@ -191,6 +190,7 @@ describe("Create position", () => {
       const config = await createConfigIx(
         context.banksClient,
         admin,
+        new BN(randomID()),
         createConfigParams
       );
 

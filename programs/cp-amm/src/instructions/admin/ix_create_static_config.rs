@@ -14,7 +14,7 @@ use crate::{
 };
 
 #[derive(AnchorSerialize, AnchorDeserialize, Debug)]
-pub struct ConfigParameters {
+pub struct StaticConfigParameters {
     pub pool_fees: PoolFeeParameters,
     pub sqrt_min_price: u128,
     pub sqrt_max_price: u128,
@@ -22,16 +22,15 @@ pub struct ConfigParameters {
     pub pool_creator_authority: Pubkey,
     pub activation_type: u8,
     pub collect_fee_mode: u8,
-    pub index: u64,
 }
 
 #[event_cpi]
 #[derive(Accounts)]
-#[instruction(config_parameters: ConfigParameters)]
+#[instruction(index: u64)]
 pub struct CreateConfigCtx<'info> {
     #[account(
         init,
-        seeds = [CONFIG_PREFIX.as_ref(), config_parameters.index.to_le_bytes().as_ref()],
+        seeds = [CONFIG_PREFIX.as_ref(), index.to_le_bytes().as_ref()],
         bump,
         payer = admin,
         space = 8 + Config::INIT_SPACE
@@ -44,11 +43,12 @@ pub struct CreateConfigCtx<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handle_create_config(
+pub fn handle_create_static_config(
     ctx: Context<CreateConfigCtx>,
-    config_parameters: ConfigParameters,
+    index: u64,
+    config_parameters: StaticConfigParameters,
 ) -> Result<()> {
-    let ConfigParameters {
+    let StaticConfigParameters {
         pool_fees,
         vault_config_key,
         pool_creator_authority,
@@ -56,7 +56,6 @@ pub fn handle_create_config(
         sqrt_min_price,
         sqrt_max_price,
         collect_fee_mode,
-        index,
     } = config_parameters;
 
     require!(
@@ -100,7 +99,7 @@ pub fn handle_create_config(
     partner_info.validate()?;
 
     let mut config = ctx.accounts.config.load_init()?;
-    config.init(
+    config.init_static_config(
         index,
         &pool_fees,
         vault_config_key,

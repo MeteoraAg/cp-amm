@@ -5,9 +5,9 @@ use anchor_client::solana_sdk::instruction::Instruction;
 use anchor_client::{solana_sdk::signer::Signer, Program};
 use anchor_lang::prelude::Pubkey;
 use anyhow::*;
-use cp_amm::instruction;
+use cp_amm::accounts;
 use cp_amm::params::fee_parameters::PoolFeeParameters;
-use cp_amm::{accounts, ConfigParameters};
+use cp_amm::{instruction, StaticConfigParameters};
 
 use crate::common::pda::{derive_config_pda, derive_event_authority_pda};
 
@@ -54,7 +54,7 @@ pub fn create_config<C: Deref<Target = impl Signer> + Clone>(
                 program: cp_amm::ID,
             };
 
-            let config_parameters = ConfigParameters {
+            let config_parameters = StaticConfigParameters {
                 pool_fees,
                 vault_config_key,
                 pool_creator_authority,
@@ -62,10 +62,12 @@ pub fn create_config<C: Deref<Target = impl Signer> + Clone>(
                 sqrt_min_price,
                 sqrt_max_price,
                 collect_fee_mode,
-                index,
             };
 
-            let ix = instruction::CreateConfig { config_parameters };
+            let ix = instruction::CreateConfig {
+                index,
+                config_parameters,
+            };
 
             let mut request_builder = program.request();
 

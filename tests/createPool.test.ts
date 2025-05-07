@@ -65,7 +65,6 @@ describe("Initialize pool", () => {
       );
       // create config
       const createConfigParams: CreateConfigParams = {
-        index: new BN(configId),
         poolFees: {
           baseFee: {
             cliffFeeNumerator: new BN(2_500_000),
@@ -90,6 +89,7 @@ describe("Initialize pool", () => {
       config = await createConfigIx(
         context.banksClient,
         admin,
+        new BN(configId),
         createConfigParams
       );
     });
@@ -171,7 +171,6 @@ describe("Initialize pool", () => {
       );
       // create config
       const createConfigParams: CreateConfigParams = {
-        index: new BN(configId),
         poolFees: {
           baseFee: {
             cliffFeeNumerator: new BN(2_500_000),
@@ -196,6 +195,7 @@ describe("Initialize pool", () => {
       config = await createConfigIx(
         context.banksClient,
         admin,
+        new BN(configId),
         createConfigParams
       );
     });

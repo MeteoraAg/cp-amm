@@ -33,11 +33,22 @@ pub mod cp_amm {
 
     /// ADMIN FUNCTIONS /////
 
+    // create static config
     pub fn create_config(
         ctx: Context<CreateConfigCtx>,
-        config_parameters: ConfigParameters,
+        index: u64,
+        config_parameters: StaticConfigParameters,
     ) -> Result<()> {
-        instructions::handle_create_config(ctx, config_parameters)
+        instructions::handle_create_static_config(ctx, index, config_parameters)
+    }
+
+    // create static config
+    pub fn create_dynamic_config(
+        ctx: Context<CreateConfigCtx>,
+        index: u64,
+        config_parameters: DynamicConfigParameters,
+    ) -> Result<()> {
+        instructions::handle_create_dynamic_config(ctx, index, config_parameters)
     }
 
     pub fn create_token_badge(ctx: Context<CreateTokenBadgeCtx>) -> Result<()> {
@@ -120,6 +131,13 @@ pub mod cp_amm {
         params: InitializePoolParameters,
     ) -> Result<()> {
         instructions::handle_initialize_pool(ctx, params)
+    }
+
+    pub fn initialize_pool_with_dynamic_config<'c: 'info, 'info>(
+        ctx: Context<'_, '_, 'c, 'info, InitializePoolWithDynamicConfigCtx<'info>>,
+        params: InitializeCustomizablePoolParameters,
+    ) -> Result<()> {
+        instructions::handle_initialize_pool_with_dynamic_config(ctx, params)
     }
 
     pub fn initialize_customizable_pool<'c: 'info, 'info>(

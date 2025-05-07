@@ -124,4 +124,10 @@ pub enum PoolError {
 
     #[msg("Position is not empty")]
     PositionIsNotEmpty,
+
+    #[msg("Invalid pool creator authority")]
+    InvalidPoolCreatorAuthority,
+
+    #[msg("Invalid config type")]
+    InvalidConfigType,
 }

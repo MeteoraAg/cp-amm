@@ -10,7 +10,8 @@ MCPA is a brand new AMM program of Meteora that includes almost all features fro
 
 ## Endpoints
 ### Admin
-- create_config: create a config key that includes all pre-defined parameters when user create pools with that config key.
+- create_config: create a static config key that includes all pre-defined parameters when user create pools with that config key.
+- create_dynamic_config: create a dynamic config key that only define pool creator authority.
 - create_token_badge: whitelist token mint, that has non-permissionless extensions (token2022)
 - create_claim_fee_operator: whitelist an address to claim protocol fee
 - close_claim_fee_operato: unwhitelist the address to claim protocol fee
@@ -31,7 +32,8 @@ MCPA is a brand new AMM program of Meteora that includes almost all features fro
 - claim_partner_fee: claim partner fee
 
 ### Token deployer 
-- initialize_pool: create a new pool from a config key 
+- initialize_pool: create a new pool from a static config key 
+- initialize_pool_with_dynamic_config: create a new pool from a dynamic config key 
 - initialize_customizable_pool: create a new pool with customizable parameters, should be only used by token deployer, that token can't be leaked.
 
 ### Liquidity provider

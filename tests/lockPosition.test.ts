@@ -104,7 +104,6 @@ describe("Lock position", () => {
       );
       // create config
       const createConfigParams: CreateConfigParams = {
-        index: new BN(configId),
         poolFees: {
           baseFee: {
             cliffFeeNumerator: new BN(10_000_000),
@@ -129,6 +128,7 @@ describe("Lock position", () => {
       config = await createConfigIx(
         context.banksClient,
         admin,
+        new BN(configId),
         createConfigParams
       );
 
@@ -200,7 +200,6 @@ describe("Lock position", () => {
           cliffUnlockLiquidity,
           liquidityPerPeriod,
           numberOfPeriod,
-          index: vestings.length,
         };
 
         const vesting = await lockPosition(
@@ -421,7 +420,6 @@ describe("Lock position", () => {
 
       // create config
       const createConfigParams: CreateConfigParams = {
-        index: new BN(configId),
         poolFees: {
           baseFee: {
             cliffFeeNumerator: new BN(10_000_000),
@@ -446,6 +444,7 @@ describe("Lock position", () => {
       config = await createConfigIx(
         context.banksClient,
         admin,
+        new BN(configId),
         createConfigParams
       );
 
@@ -517,7 +516,6 @@ describe("Lock position", () => {
           cliffUnlockLiquidity,
           liquidityPerPeriod,
           numberOfPeriod,
-          index: vestings.length,
         };
 
         const vesting = await lockPosition(

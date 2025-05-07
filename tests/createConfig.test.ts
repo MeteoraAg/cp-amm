@@ -1,5 +1,3 @@
-import { BN } from "bn.js";
-
 import { ProgramTestContext } from "solana-bankrun";
 import { generateKpAndFund, randomID, startTest } from "./bankrun-utils/common";
 import { Keypair, PublicKey } from "@solana/web3.js";
@@ -13,19 +11,19 @@ import {
   OFFSET,
 } from "./bankrun-utils";
 import { shlDiv } from "./bankrun-utils/math";
+import { BN } from "bn.js";
 
 describe("Admin function: Create config", () => {
   let context: ProgramTestContext;
   let admin: Keypair;
   let createConfigParams: CreateConfigParams;
+  let index;
 
   beforeEach(async () => {
     const root = Keypair.generate();
     context = await startTest(root);
     admin = await generateKpAndFund(context.banksClient, context.payer);
-
     createConfigParams = {
-      index: new BN(randomID()),
       poolFees: {
         baseFee: {
           cliffFeeNumerator: new BN(2_500_000),
@@ -46,16 +44,18 @@ describe("Admin function: Create config", () => {
       activationType: 0,
       collectFeeMode: 0,
     };
+    index = new BN(randomID())
   });
 
   it("Admin create config", async () => {
-    await createConfigIx(context.banksClient, admin, createConfigParams);
+    await createConfigIx(context.banksClient, admin, index, createConfigParams);
   });
 
   it("Admin close config", async () => {
     const config = await createConfigIx(
       context.banksClient,
       admin,
+      index,
       createConfigParams
     );
     await closeConfigIx(context.banksClient, admin, config);
@@ -73,7 +73,6 @@ describe("Admin function: Create config", () => {
 
     //
     const createConfigParams: CreateConfigParams = {
-      index: new BN(Math.floor(Math.random() * 1000)),
       poolFees: {
         baseFee: {
           cliffFeeNumerator: new BN(2_500_000),
@@ -103,6 +102,6 @@ describe("Admin function: Create config", () => {
       collectFeeMode: 0,
     };
 
-    await createConfigIx(context.banksClient, admin, createConfigParams);
+    await createConfigIx(context.banksClient, admin, new BN(Math.floor(Math.random() * 1000)), createConfigParams);
   });
 });

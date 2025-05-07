@@ -87,7 +87,6 @@ describe("Add liquidity", () => {
 
       // create config
       const createConfigParams: CreateConfigParams = {
-        index: new BN(randomID()),
         poolFees: {
           baseFee: {
             cliffFeeNumerator: new BN(2_500_000),
@@ -112,6 +111,7 @@ describe("Add liquidity", () => {
       config = await createConfigIx(
         context.banksClient,
         admin,
+        new BN(randomID()),
         createConfigParams
       );
     });
@@ -316,7 +316,6 @@ describe("Add liquidity", () => {
 
       // create config
       const createConfigParams: CreateConfigParams = {
-        index: new BN(randomID()),
         poolFees: {
           baseFee: {
             cliffFeeNumerator: new BN(2_500_000),
@@ -341,6 +340,7 @@ describe("Add liquidity", () => {
       config = await createConfigIx(
         context.banksClient,
         admin,
+        new BN(randomID()),
         createConfigParams
       );
     });

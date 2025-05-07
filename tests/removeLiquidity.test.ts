@@ -85,7 +85,6 @@ describe("Remove liquidity", () => {
 
       // create config
       const createConfigParams = {
-        index: new BN(randomID()),
         poolFees: {
           baseFee: {
             cliffFeeNumerator: new BN(2_500_000),
@@ -110,6 +109,7 @@ describe("Remove liquidity", () => {
       config = await createConfigIx(
         context.banksClient,
         admin,
+        new BN(randomID()),
         createConfigParams
       );
 
@@ -239,7 +239,6 @@ describe("Remove liquidity", () => {
 
       // create config
       const createConfigParams = {
-        index: new BN(randomID()),
         poolFees: {
           baseFee: {
             cliffFeeNumerator: new BN(2_500_000),
@@ -264,6 +263,7 @@ describe("Remove liquidity", () => {
       config = await createConfigIx(
         context.banksClient,
         admin,
+        new BN(randomID()),
         createConfigParams
       );
 

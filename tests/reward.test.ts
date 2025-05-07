@@ -118,7 +118,6 @@ describe("Reward unit-testing", () => {
       );
       // create config
       const createConfigParams: CreateConfigParams = {
-        index: new BN(configId),
         poolFees: {
           baseFee: {
             cliffFeeNumerator: new BN(2_500_000),
@@ -143,6 +142,7 @@ describe("Reward unit-testing", () => {
       config = await createConfigIx(
         context.banksClient,
         admin,
+        new BN(configId),
         createConfigParams
       );
     });
@@ -345,7 +345,6 @@ describe("Reward unit-testing", () => {
       );
       // create config
       const createConfigParams: CreateConfigParams = {
-        index: new BN(configId),
         poolFees: {
           baseFee: {
             cliffFeeNumerator: new BN(2_500_000),
@@ -370,6 +369,7 @@ describe("Reward unit-testing", () => {
       config = await createConfigIx(
         context.banksClient,
         admin,
+        new BN(configId),
         createConfigParams
       );
     });

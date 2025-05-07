@@ -3,7 +3,6 @@ use anchor_spl::{
     token_2022::Token2022,
     token_interface::{Mint, TokenAccount, TokenInterface},
 };
-use std::cmp::{max, min};
 
 use crate::{
     activation_handler::ActivationHandler,
@@ -13,37 +12,20 @@ use crate::{
     },
     create_position_nft,
     curve::get_initialize_amounts,
-    params::activation::ActivationParams,
+    get_whitelisted_alpha_vault,
     state::{Config, ConfigType, Pool, PoolType, Position},
     token::{
         calculate_transfer_fee_included_amount, get_token_program_flags, is_supported_mint,
         is_token_badge_initialized, transfer_from_user,
     },
-    EvtCreatePosition, EvtInitializePool, PoolError,
+    validate_quote_token, EvtCreatePosition, EvtInitializePool, PoolError,
 };
 
-// To fix IDL generation: https://github.com/coral-xyz/anchor/issues/3209
-pub fn max_key(left: &Pubkey, right: &Pubkey) -> [u8; 32] {
-    max(left, right).to_bytes()
-}
-
-pub fn min_key(left: &Pubkey, right: &Pubkey) -> [u8; 32] {
-    min(left, right).to_bytes()
-}
-
-#[derive(AnchorSerialize, AnchorDeserialize)]
-pub struct InitializePoolParameters {
-    /// initialize liquidity
-    pub liquidity: u128,
-    /// The init price of the pool as a sqrt(token_b/token_a) Q64.64 value
-    pub sqrt_price: u128,
-    /// activation point
-    pub activation_point: Option<u64>,
-}
+use super::{max_key, min_key, InitializeCustomizablePoolParameters};
 
 #[event_cpi]
 #[derive(Accounts)]
-pub struct InitializePoolCtx<'info> {
+pub struct InitializePoolWithDynamicConfigCtx<'info> {
     /// CHECK: Pool creator
     pub creator: UncheckedAccount<'info>,
 
@@ -78,7 +60,10 @@ pub struct InitializePoolCtx<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
 
+    pub pool_creator_authority: Signer<'info>,
+
     /// Which config the pool belongs to.
+    #[account(has_one = pool_creator_authority)]
     pub config: AccountLoader<'info, Config>,
 
     /// CHECK: pool authority
@@ -182,10 +167,11 @@ pub struct InitializePoolCtx<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handle_initialize_pool<'c: 'info, 'info>(
-    ctx: Context<'_, '_, 'c, 'info, InitializePoolCtx<'info>>,
-    params: InitializePoolParameters,
+pub fn handle_initialize_pool_with_dynamic_config<'c: 'info, 'info>(
+    ctx: Context<'_, '_, 'c, 'info, InitializePoolWithDynamicConfigCtx<'info>>,
+    params: InitializeCustomizablePoolParameters,
 ) -> Result<()> {
+    params.validate()?;
     if !is_supported_mint(&ctx.accounts.token_a_mint)? {
         require!(
             is_token_badge_initialized(
@@ -210,10 +196,16 @@ pub fn handle_initialize_pool<'c: 'info, 'info>(
         )
     }
 
-    let InitializePoolParameters {
+    let InitializeCustomizablePoolParameters {
+        pool_fees,
         liquidity,
         sqrt_price,
         activation_point,
+        sqrt_min_price,
+        sqrt_max_price,
+        activation_type,
+        collect_fee_mode,
+        has_alpha_vault,
     } = params;
 
     require!(liquidity > 0, PoolError::InvalidMinimumLiquidity);
@@ -222,73 +214,58 @@ pub fn handle_initialize_pool<'c: 'info, 'info>(
     let config = ctx.accounts.config.load()?;
 
     require!(
-        config.get_config_type()? == ConfigType::Static,
+        config.get_config_type()? == ConfigType::Dynamic,
         PoolError::InvalidConfigType
     );
 
-    require!(
-        config.pool_creator_authority.eq(&Pubkey::default())
-            || config.pool_creator_authority.eq(&ctx.accounts.payer.key()),
-        PoolError::InvalidAuthorityToCreateThePool
-    );
-
-    let activation_params = ActivationParams {
-        activation_point,
-        activation_type: config.activation_type,
-        has_alpha_vault: config.has_alpha_vault(),
-    };
-    activation_params.validate()?;
-
-    let activation_point = activation_point.unwrap_or(ActivationHandler::get_current_point(
-        config.activation_type,
-    )?);
-
-    require!(
-        sqrt_price >= config.sqrt_min_price && sqrt_price <= config.sqrt_max_price,
-        PoolError::InvalidPriceRange
-    );
-
-    let (token_a_amount, token_b_amount) = get_initialize_amounts(
-        config.sqrt_min_price,
-        config.sqrt_max_price,
-        sqrt_price,
-        liquidity,
+    // validate quote token
+    #[cfg(not(feature = "devnet"))]
+    validate_quote_token(
+        &ctx.accounts.token_a_mint.key(),
+        &ctx.accounts.token_b_mint.key(),
+        has_alpha_vault,
     )?;
 
+    let (token_a_amount, token_b_amount) =
+        get_initialize_amounts(sqrt_min_price, sqrt_max_price, sqrt_price, liquidity)?;
     require!(
         token_a_amount > 0 || token_b_amount > 0,
         PoolError::AmountIsZero
     );
+
     let mut pool = ctx.accounts.pool.load_init()?;
 
     let token_a_flag: u8 = get_token_program_flags(&ctx.accounts.token_a_mint).into();
     let token_b_flag: u8 = get_token_program_flags(&ctx.accounts.token_b_mint).into();
-    let pool_type: u8 = PoolType::Permissionless.into();
-
-    let alpha_vault = config.get_whitelisted_alpha_vault(ctx.accounts.pool.key());
+    let activation_point =
+        activation_point.unwrap_or(ActivationHandler::get_current_point(activation_type)?);
+    let alpha_vault = get_whitelisted_alpha_vault(
+        ctx.accounts.payer.key(),
+        ctx.accounts.pool.key(),
+        has_alpha_vault,
+    );
+    let pool_type: u8 = PoolType::Customizable.into();
     pool.initialize(
-        config.pool_fees.to_pool_fees_struct(),
+        pool_fees.to_pool_fees_struct(),
         ctx.accounts.token_a_mint.key(),
         ctx.accounts.token_b_mint.key(),
         ctx.accounts.token_a_vault.key(),
         ctx.accounts.token_b_vault.key(),
         alpha_vault,
         config.pool_creator_authority,
-        config.sqrt_min_price,
-        config.sqrt_max_price,
+        sqrt_min_price,
+        sqrt_max_price,
         sqrt_price,
         activation_point,
-        config.activation_type,
+        activation_type,
         token_a_flag,
         token_b_flag,
         liquidity,
-        config.collect_fee_mode,
+        collect_fee_mode,
         pool_type,
     );
 
-    // init position
     let mut position = ctx.accounts.position.load_init()?;
-
     position.initialize(
         &mut pool,
         ctx.accounts.pool.key(),
@@ -342,19 +319,19 @@ pub fn handle_initialize_pool<'c: 'info, 'info>(
         pool: ctx.accounts.pool.key(),
         token_a_mint: ctx.accounts.token_a_mint.key(),
         token_b_mint: ctx.accounts.token_b_mint.key(),
-        pool_fees: config.pool_fees.to_pool_fee_parameters(),
+        pool_fees,
         creator: ctx.accounts.creator.key(),
         payer: ctx.accounts.payer.key(),
         activation_point,
-        activation_type: config.activation_type,
+        activation_type,
         token_a_flag,
         token_b_flag,
         sqrt_price,
         liquidity,
-        sqrt_min_price: config.sqrt_min_price,
-        sqrt_max_price: config.sqrt_max_price,
+        sqrt_min_price,
+        sqrt_max_price,
         alpha_vault,
-        collect_fee_mode: config.collect_fee_mode,
+        collect_fee_mode,
         token_a_amount,
         token_b_amount,
         total_amount_a,
