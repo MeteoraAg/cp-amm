@@ -69,27 +69,34 @@ pub struct ClaimProtocolFeesCtx<'info> {
 pub fn handle_claim_protocol_fee(ctx: Context<ClaimProtocolFeesCtx>) -> Result<()> {
     let mut pool = ctx.accounts.pool.load_mut()?;
 
-    let (token_a_amount, token_b_amount) = pool.claim_protocol_fee();
+    let (token_a_amount, token_b_amount) = pool.claim_protocol_fee(
+        ctx.accounts.token_a_vault.is_frozen(),
+        ctx.accounts.token_b_vault.is_frozen(),
+    );
 
-    transfer_from_pool(
-        ctx.accounts.pool_authority.to_account_info(),
-        &ctx.accounts.token_a_mint,
-        &ctx.accounts.token_a_vault,
-        &ctx.accounts.token_a_account,
-        &ctx.accounts.token_a_program,
-        token_a_amount,
-        ctx.bumps.pool_authority,
-    )?;
+    if token_a_amount > 0 {
+        transfer_from_pool(
+            ctx.accounts.pool_authority.to_account_info(),
+            &ctx.accounts.token_a_mint,
+            &ctx.accounts.token_a_vault,
+            &ctx.accounts.token_a_account,
+            &ctx.accounts.token_a_program,
+            token_a_amount,
+            ctx.bumps.pool_authority,
+        )?;
+    }
 
-    transfer_from_pool(
-        ctx.accounts.pool_authority.to_account_info(),
-        &ctx.accounts.token_b_mint,
-        &ctx.accounts.token_b_vault,
-        &ctx.accounts.token_b_account,
-        &ctx.accounts.token_b_program,
-        token_b_amount,
-        ctx.bumps.pool_authority,
-    )?;
+    if token_b_amount > 0 {
+        transfer_from_pool(
+            ctx.accounts.pool_authority.to_account_info(),
+            &ctx.accounts.token_b_mint,
+            &ctx.accounts.token_b_vault,
+            &ctx.accounts.token_b_account,
+            &ctx.accounts.token_b_program,
+            token_b_amount,
+            ctx.bumps.pool_authority,
+        )?;
+    }
 
     emit_cpi!(EvtClaimProtocolFee {
         pool: ctx.accounts.pool.key(),
