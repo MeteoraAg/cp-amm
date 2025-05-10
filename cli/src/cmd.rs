@@ -51,6 +51,9 @@ pub enum Command {
         trade_fee_numerator: u64,
 
         #[clap(long)]
+        max_fee_bps: u64,
+
+        #[clap(long)]
         protocol_fee_percent: u8,
 
         #[clap(long)]
@@ -66,6 +69,9 @@ pub enum Command {
 
         #[clap(long)]
         trade_fee_numerator: u64,
+
+        #[clap(long)]
+        max_fee_bps: u64,
 
         #[clap(long)]
         protocol_fee_percent: u8,

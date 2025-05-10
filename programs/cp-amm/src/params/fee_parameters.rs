@@ -1,7 +1,7 @@
 //! Fees module includes information about fee charges
 use crate::constants::fee::{
     CUSTOMIZABLE_HOST_FEE_PERCENT, CUSTOMIZABLE_PROTOCOL_FEE_PERCENT, FEE_DENOMINATOR,
-    MAX_BASIS_POINT, MAX_FEE_NUMERATOR, MIN_FEE_NUMERATOR,
+    MAX_BASIS_POINT, MAX_FEE_BPS_DEFAULT, MIN_FEE_BPS, MIN_FEE_NUMERATOR,
 };
 use crate::constants::{BASIS_POINT_MAX, BIN_STEP_BPS_DEFAULT, BIN_STEP_BPS_U128_DEFAULT, U24_MAX};
 use crate::error::PoolError;
@@ -24,6 +24,8 @@ pub struct PoolFeeParameters {
     pub partner_fee_percent: u8,
     /// referral fee percent
     pub referral_fee_percent: u8,
+    /// max_fee_bps
+    pub max_fee_bps: u64,
     /// dynamic fee
     pub dynamic_fee: Option<DynamicFeeParameters>,
 }
@@ -63,13 +65,14 @@ impl BaseFeeParameters {
         }
     }
 
-    fn validate(&self) -> Result<()> {
-        let min_fee_numerator = self.get_min_base_fee_numerator()?;
-        let max_fee_numerator = self.get_max_base_fee_numerator();
-        validate_fee_fraction(min_fee_numerator, FEE_DENOMINATOR)?;
-        validate_fee_fraction(max_fee_numerator, FEE_DENOMINATOR)?;
+    fn validate(&self, max_fee_numerator: u64) -> Result<()> {
+        let min_base_fee_numerator = self.get_min_base_fee_numerator()?;
+        let max_base_fee_numerator = self.get_max_base_fee_numerator();
+        validate_fee_fraction(min_base_fee_numerator, FEE_DENOMINATOR)?;
+        validate_fee_fraction(max_base_fee_numerator, FEE_DENOMINATOR)?;
         require!(
-            min_fee_numerator >= MIN_FEE_NUMERATOR && max_fee_numerator <= MAX_FEE_NUMERATOR,
+            min_base_fee_numerator >= MIN_FEE_NUMERATOR
+                && max_base_fee_numerator <= max_fee_numerator,
             PoolError::ExceedMaxFeeBps
         );
         Ok(())
@@ -104,6 +107,7 @@ impl PoolFeeParameters {
             protocol_fee_percent,
             partner_fee_percent,
             referral_fee_percent,
+            max_fee_bps,
             dynamic_fee,
         } = self;
         if let Some(dynamic_fee) = dynamic_fee {
@@ -112,6 +116,8 @@ impl PoolFeeParameters {
                 protocol_fee_percent,
                 partner_fee_percent,
                 referral_fee_percent,
+                max_fee_bps,
+                max_fee_numerator: to_max_fee_numerator(max_fee_bps).unwrap(),
                 dynamic_fee: dynamic_fee.to_dynamic_fee_config(),
                 ..Default::default()
             }
@@ -121,6 +127,8 @@ impl PoolFeeParameters {
                 protocol_fee_percent,
                 partner_fee_percent,
                 referral_fee_percent,
+                max_fee_bps,
+                max_fee_numerator: to_max_fee_numerator(max_fee_bps).unwrap(),
                 ..Default::default()
             }
         }
@@ -131,6 +139,7 @@ impl PoolFeeParameters {
             protocol_fee_percent,
             partner_fee_percent,
             referral_fee_percent,
+            max_fee_bps,
             dynamic_fee,
         } = self;
         if let Some(dynamic_fee) = dynamic_fee {
@@ -139,6 +148,8 @@ impl PoolFeeParameters {
                 protocol_fee_percent,
                 partner_fee_percent,
                 referral_fee_percent,
+                max_fee_bps,
+                max_fee_numerator: to_max_fee_numerator(max_fee_bps).unwrap(),
                 dynamic_fee: dynamic_fee.to_dynamic_fee_struct(),
                 ..Default::default()
             }
@@ -148,6 +159,8 @@ impl PoolFeeParameters {
                 protocol_fee_percent,
                 partner_fee_percent,
                 referral_fee_percent,
+                max_fee_bps,
+                max_fee_numerator: to_max_fee_numerator(max_fee_bps).unwrap(),
                 ..Default::default()
             }
         }
@@ -265,10 +278,25 @@ pub fn to_bps(numerator: u128, denominator: u128) -> Option<u64> {
     bps.try_into().ok()
 }
 
+pub fn to_max_fee_numerator(max_fee_bps: u64) -> Result<u64> {
+    let max_fee_numerator = max_fee_bps
+        .safe_mul(FEE_DENOMINATOR)?
+        .safe_div(MAX_BASIS_POINT)?;
+
+    Ok(max_fee_numerator)
+}
+
 impl PoolFeeParameters {
     /// Validate that the fees are reasonable
     pub fn validate(&self) -> Result<()> {
-        self.base_fee.validate()?;
+        require!(
+            self.max_fee_bps > MIN_FEE_BPS && self.max_fee_bps <= MAX_FEE_BPS_DEFAULT,
+            PoolError::InvalidFee
+        );
+
+        let max_fee_numerator = to_max_fee_numerator(self.max_fee_bps).unwrap();
+        self.base_fee.validate(max_fee_numerator)?;
+
         validate_fee_fraction(self.protocol_fee_percent.into(), 100)?;
         validate_fee_fraction(self.partner_fee_percent.into(), 100)?;
         validate_fee_fraction(self.referral_fee_percent.into(), 100)?;

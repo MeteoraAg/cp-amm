@@ -94,6 +94,7 @@ describe("Claim position fee", () => {
           periodFrequency: new BN(0),
           feeSchedulerMode: 0,
         },
+        maxFeeBps: new BN(5000),
         protocolFeePercent: 10,
         partnerFeePercent: 0,
         referralFeePercent: 0,

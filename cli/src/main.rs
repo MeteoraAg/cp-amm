@@ -82,6 +82,7 @@ fn main() -> Result<()> {
             activation_type,
             collect_fee_mode,
             trade_fee_numerator,
+            max_fee_bps,
             protocol_fee_percent,
             partner_fee_percent,
             referral_fee_percent,
@@ -94,6 +95,7 @@ fn main() -> Result<()> {
                 protocol_fee_percent,
                 partner_fee_percent,
                 referral_fee_percent,
+                max_fee_bps,
                 dynamic_fee: None, // TODO implement for dynamic fee
             };
 
@@ -113,6 +115,7 @@ fn main() -> Result<()> {
             trade_fee_numerator,
             protocol_fee_percent,
             partner_fee_percent,
+            max_fee_bps,
             referral_fee_percent,
         } => {
             let params = UpdateConfigParams {
@@ -123,6 +126,7 @@ fn main() -> Result<()> {
                 },
                 protocol_fee_percent,
                 partner_fee_percent,
+                max_fee_bps,
                 referral_fee_percent,
             };
             update_config(params, &program, transaction_config, compute_unit_price_ix)?;

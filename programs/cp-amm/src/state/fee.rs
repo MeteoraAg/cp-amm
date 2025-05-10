@@ -5,10 +5,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 use static_assertions::const_assert_eq;
 
 use crate::{
-    constants::{
-        fee::{FEE_DENOMINATOR, MAX_FEE_NUMERATOR},
-        BASIS_POINT_MAX, ONE_Q64,
-    },
+    constants::{fee::FEE_DENOMINATOR, BASIS_POINT_MAX, ONE_Q64},
     fee_math::get_fee_in_period,
     params::swap::TradeDirection,
     safe_math::SafeMath,
@@ -78,11 +75,16 @@ pub struct PoolFeesStruct {
     /// dynamic fee
     pub dynamic_fee: DynamicFeeStruct,
 
+    /// max_fee_bps
+    pub max_fee_bps: u64,
+    /// max_fee_numerator
+    pub max_fee_numerator: u64,
+
     /// padding
     pub padding_1: [u64; 2],
 }
 
-const_assert_eq!(PoolFeesStruct::INIT_SPACE, 160);
+const_assert_eq!(PoolFeesStruct::INIT_SPACE, 176);
 
 #[zero_copy]
 #[derive(Debug, InitSpace, Default)]
@@ -164,8 +166,8 @@ impl PoolFeesStruct {
         activation_point: u64,
     ) -> Result<FeeOnAmountResult> {
         let trade_fee_numerator = self.get_total_trading_fee(current_point, activation_point)?;
-        let trade_fee_numerator = if trade_fee_numerator > MAX_FEE_NUMERATOR.into() {
-            MAX_FEE_NUMERATOR
+        let trade_fee_numerator = if trade_fee_numerator > self.max_fee_numerator.into() {
+            self.max_fee_numerator
         } else {
             trade_fee_numerator.try_into().unwrap()
         };
