@@ -1,6 +1,3 @@
-use anchor_lang::prelude::Pubkey;
-use anchor_lang::solana_program::pubkey;
-
 /// refer raydium clmm
 pub const MIN_SQRT_PRICE: u128 = 4295048016;
 /// refer raydium clmm
@@ -121,8 +118,3 @@ pub mod treasury {
     // https://app.squads.so/squads/4EWqcx3aNZmMetCnxwLYwyNjan6XLGp3Ca2W316vrSjv/treasury
     pub const ID: Pubkey = pubkey!("4EWqcx3aNZmMetCnxwLYwyNjan6XLGp3Ca2W316vrSjv");
 }
-
-// Supported quote mints
-const SOL: Pubkey = pubkey!("So11111111111111111111111111111111111111112");
-const USDC: Pubkey = pubkey!("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v");
-pub const DEFAULT_QUOTE_MINTS: [Pubkey; 2] = [SOL, USDC];
