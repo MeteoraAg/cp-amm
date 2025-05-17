@@ -18,7 +18,7 @@ use crate::{
         calculate_transfer_fee_included_amount, get_token_program_flags, is_supported_mint,
         is_token_badge_initialized, transfer_from_user,
     },
-    validate_quote_token, EvtCreatePosition, EvtInitializePool, PoolError,
+    EvtCreatePosition, EvtInitializePool, PoolError,
 };
 
 use super::{max_key, min_key, InitializeCustomizablePoolParameters};
@@ -215,14 +215,6 @@ pub fn handle_initialize_pool_with_dynamic_config<'c: 'info, 'info>(
         config.get_config_type()? == ConfigType::Dynamic,
         PoolError::InvalidConfigType
     );
-
-    // validate quote token
-    #[cfg(not(feature = "devnet"))]
-    validate_quote_token(
-        &ctx.accounts.token_a_mint.key(),
-        &ctx.accounts.token_b_mint.key(),
-        has_alpha_vault,
-    )?;
 
     let (token_a_amount, token_b_amount) =
         get_initialize_amounts(sqrt_min_price, sqrt_max_price, sqrt_price, liquidity)?;
