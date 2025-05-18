@@ -682,11 +682,27 @@ impl Pool {
         Ok(())
     }
 
-    pub fn claim_protocol_fee(&mut self) -> (u64, u64) {
-        let token_a_amount = self.protocol_a_fee;
-        let token_b_amount = self.protocol_b_fee;
-        self.protocol_a_fee = 0;
-        self.protocol_b_fee = 0;
+    pub fn claim_protocol_fee(
+        &mut self,
+        is_token_a_frozen: bool,
+        is_token_b_frozen: bool,
+    ) -> (u64, u64) {
+        let token_a_amount = if !is_token_a_frozen {
+            let token_a_amount = self.protocol_a_fee;
+            self.protocol_a_fee = 0;
+            token_a_amount
+        } else {
+            0
+        };
+
+        let token_b_amount = if !is_token_b_frozen {
+            let token_b_amount = self.protocol_b_fee;
+            self.protocol_b_fee = 0;
+            token_b_amount
+        } else {
+            0
+        };
+
         (token_a_amount, token_b_amount)
     }
 
