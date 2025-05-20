@@ -7,7 +7,7 @@ use crate::{
     constants::seeds::POOL_AUTHORITY_PREFIX,
     get_pool_access_validator,
     state::{ModifyLiquidityResult, Pool, Position},
-    token::transfer_from_pool,
+    token::{calculate_transfer_fee_excluded_amount, transfer_from_pool},
     u128x128_math::Rounding,
     EvtRemoveLiquidity, PoolError,
 };
@@ -115,13 +115,18 @@ pub fn handle_remove_liquidity(
         token_a_amount > 0 || token_b_amount > 0,
         PoolError::AmountIsZero
     );
+
+    let transfer_fee_excluded_amount_a =
+        calculate_transfer_fee_excluded_amount(&ctx.accounts.token_a_mint, token_a_amount)?.amount;
+    let transfer_fee_excluded_amount_b =
+        calculate_transfer_fee_excluded_amount(&ctx.accounts.token_b_mint, token_b_amount)?.amount;
     // Slippage check
     require!(
-        token_a_amount >= token_a_amount_threshold,
+        transfer_fee_excluded_amount_a >= token_a_amount_threshold,
         PoolError::ExceededSlippage
     );
     require!(
-        token_b_amount >= token_b_amount_threshold,
+        transfer_fee_excluded_amount_b >= token_b_amount_threshold,
         PoolError::ExceededSlippage
     );
 
