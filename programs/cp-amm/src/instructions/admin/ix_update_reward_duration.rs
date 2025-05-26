@@ -13,10 +13,7 @@ pub struct UpdateRewardDurationCtx<'info> {
     #[account(mut)]
     pub pool: AccountLoader<'info, Pool>,
 
-    #[account(
-        constraint = assert_eq_admin(admin.key()) @ PoolError::InvalidAdmin,
-    )]
-    pub admin: Signer<'info>,
+    pub signer: Signer<'info>,
 }
 
 impl<'info> UpdateRewardDurationCtx<'info> {
@@ -44,6 +41,16 @@ impl<'info> UpdateRewardDurationCtx<'info> {
             reward_info.reward_duration_end < (current_time as u64),
             PoolError::RewardCampaignInProgress
         );
+
+        if reward_index == 0 {
+            // only pool creator is allowed to initialize reward with index 0
+            require!(
+                pool.creator == self.signer.key(),
+                PoolError::InvalidPoolCreator
+            );
+        } else {
+            require!(assert_eq_admin(self.signer.key()), PoolError::InvalidAdmin);
+        }
 
         Ok(())
     }

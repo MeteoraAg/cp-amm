@@ -28,7 +28,7 @@ import { describe } from "mocha";
 import { ExtensionType } from "@solana/spl-token";
 import { createToken2022, mintToToken2022 } from "./bankrun-utils/token2022";
 
-describe("Reward unit-testing", () => {
+describe("Reward by creator", () => {
   // SPL-Token
   describe("Reward with SPL-Token", () => {
     let context: ProgramTestContext;
@@ -189,7 +189,7 @@ describe("Reward unit-testing", () => {
       const index = 0;
       const initRewardParams: InitializeRewardParams = {
         index,
-        payer: admin,
+        payer: creator,
         rewardDuration: new BN(24 * 60 * 60),
         pool,
         rewardMint,
@@ -199,7 +199,7 @@ describe("Reward unit-testing", () => {
       // update duration
       await updateRewardDuration(context.banksClient, {
         index,
-        admin: admin,
+        admin: creator,
         pool,
         newDuration: new BN(1),
       });
@@ -207,7 +207,7 @@ describe("Reward unit-testing", () => {
       // update new funder
       await updateRewardFunder(context.banksClient, {
         index,
-        admin: admin,
+        admin: creator,
         pool,
         newFunder: funder.publicKey,
       });
@@ -416,7 +416,7 @@ describe("Reward unit-testing", () => {
       const index = 0;
       const initRewardParams: InitializeRewardParams = {
         index,
-        payer: admin,
+        payer: creator,
         rewardDuration: new BN(24 * 60 * 60),
         pool,
         rewardMint,
@@ -426,7 +426,7 @@ describe("Reward unit-testing", () => {
       // update duration
       await updateRewardDuration(context.banksClient, {
         index,
-        admin: admin,
+        admin: creator,
         pool,
         newDuration: new BN(1),
       });
@@ -434,7 +434,7 @@ describe("Reward unit-testing", () => {
       // update new funder
       await updateRewardFunder(context.banksClient, {
         index,
-        admin: admin,
+        admin: creator,
         pool,
         newFunder: funder.publicKey,
       });
