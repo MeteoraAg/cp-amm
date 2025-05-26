@@ -137,8 +137,10 @@ pub struct Pool {
     pub permanent_lock_liquidity: u128,
     /// metrics
     pub metrics: PoolMetrics,
+    /// pool creator
+    pub creator: Pubkey,
     /// Padding for further use
-    pub _padding_1: [u64; 10],
+    pub _padding_1: [u64; 6],
     /// Farming reward information
     pub reward_infos: [RewardInfo; NUM_REWARDS],
 }
@@ -356,6 +358,7 @@ impl RewardInfo {
 impl Pool {
     pub fn initialize(
         &mut self,
+        creator: Pubkey,
         pool_fees: PoolFeesStruct,
         token_a_mint: Pubkey,
         token_b_mint: Pubkey,
@@ -374,6 +377,7 @@ impl Pool {
         collect_fee_mode: u8,
         pool_type: u8,
     ) {
+        self.creator = creator;
         self.pool_fees = pool_fees;
         self.token_a_mint = token_a_mint;
         self.token_b_mint = token_b_mint;

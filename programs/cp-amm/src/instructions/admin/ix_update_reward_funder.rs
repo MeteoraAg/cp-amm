@@ -10,8 +10,7 @@ pub struct UpdateRewardFunderCtx<'info> {
     #[account(mut)]
     pub pool: AccountLoader<'info, Pool>,
 
-    #[account(constraint = assert_eq_admin(admin.key()) @ PoolError::InvalidAdmin)]
-    pub admin: Signer<'info>,
+    pub signer: Signer<'info>,
 }
 
 impl<'info> UpdateRewardFunderCtx<'info> {
@@ -24,6 +23,16 @@ impl<'info> UpdateRewardFunderCtx<'info> {
         require!(reward_info.initialized(), PoolError::RewardUninitialized);
 
         require!(reward_info.funder != new_funder, PoolError::IdenticalFunder);
+
+        if reward_index == 0 {
+            // only pool creator is allowed to initialize reward with index 0
+            require!(
+                pool.creator == self.signer.key(),
+                PoolError::InvalidPoolCreator
+            );
+        } else {
+            require!(assert_eq_admin(self.signer.key()), PoolError::InvalidAdmin);
+        }
 
         Ok(())
     }
