@@ -12,11 +12,11 @@ use crate::{
     },
     create_position_nft,
     curve::get_initialize_amounts,
-    get_whitelisted_alpha_vault,
-    state::{Config, ConfigType, Pool, PoolType, Position},
+    get_whitelisted_alpha_vault, initialize_position_nft,
+    state::{Config, ConfigType, Pool, PoolType, Position, PositionType},
     token::{
         calculate_transfer_fee_included_amount, get_token_program_flags, is_supported_mint,
-        is_token_badge_initialized, transfer_from_user,
+        transfer_from_user, validate_and_get_position_type,
     },
     validate_quote_token, EvtCreatePosition, EvtInitializePool, PoolError,
 };
@@ -29,32 +29,17 @@ pub struct InitializePoolWithDynamicConfigCtx<'info> {
     /// CHECK: Pool creator
     pub creator: UncheckedAccount<'info>,
 
-    /// position_nft_mint
-    #[account(
-        init,
-        signer,
-        payer = payer,
-        mint::token_program = token_2022_program,
-        mint::decimals = 0,
-        mint::authority = pool_authority,
-        mint::freeze_authority = pool, // use pool, so we can filter all position_nft_mint given pool address
-        extensions::metadata_pointer::authority = pool_authority,
-        extensions::metadata_pointer::metadata_address = position_nft_mint,
-        extensions::close_authority::authority = pool_authority,
-    )]
-    pub position_nft_mint: Box<InterfaceAccount<'info, Mint>>,
+    /// CHECK: Unique token mint address, initialize in program
+    #[account(mut)]
+    pub position_nft_mint: Signer<'info>,
 
-    /// position nft account
+    /// CHECK: position nft account
     #[account(
-        init,
-        seeds = [POSITION_NFT_ACCOUNT_PREFIX.as_ref(), position_nft_mint.key().as_ref()],
-        token::mint = position_nft_mint,
-        token::authority = creator,
-        token::token_program = token_2022_program,
-        payer = payer,
-        bump,
-    )]
-    pub position_nft_account: Box<InterfaceAccount<'info, TokenAccount>>,
+       mut,
+       seeds = [POSITION_NFT_ACCOUNT_PREFIX.as_ref(), position_nft_mint.key().as_ref()],
+       bump
+   )]
+    pub position_nft_account: UncheckedAccount<'info>,
 
     /// Address paying to create the pool. Can be anyone
     #[account(mut)]
@@ -172,28 +157,28 @@ pub fn handle_initialize_pool_with_dynamic_config<'c: 'info, 'info>(
     params: InitializeCustomizablePoolParameters,
 ) -> Result<()> {
     params.validate()?;
+
+    let mut position_type: u8 = PositionType::Mutable.into();
     if !is_supported_mint(&ctx.accounts.token_a_mint)? {
-        require!(
-            is_token_badge_initialized(
-                ctx.accounts.token_a_mint.key(),
-                ctx.remaining_accounts
-                    .get(0)
-                    .ok_or(PoolError::InvalidTokenBadge)?,
-            )?,
-            PoolError::InvalidTokenBadge
-        )
+        let token_badge = ctx
+            .remaining_accounts
+            .get(0)
+            .ok_or(PoolError::InvalidTokenBadge)?;
+        let position_type_a =
+            validate_and_get_position_type(ctx.accounts.token_a_mint.key(), token_badge)?;
+
+        position_type = std::cmp::max(position_type, position_type_a);
     }
 
     if !is_supported_mint(&ctx.accounts.token_b_mint)? {
-        require!(
-            is_token_badge_initialized(
-                ctx.accounts.token_b_mint.key(),
-                ctx.remaining_accounts
-                    .get(1)
-                    .ok_or(PoolError::InvalidTokenBadge)?,
-            )?,
-            PoolError::InvalidTokenBadge
-        )
+        let token_badge = ctx
+            .remaining_accounts
+            .get(1)
+            .ok_or(PoolError::InvalidTokenBadge)?;
+        let position_type_b =
+            validate_and_get_position_type(ctx.accounts.token_b_mint.key(), token_badge)?;
+
+        position_type = std::cmp::max(position_type, position_type_b);
     }
 
     let InitializeCustomizablePoolParameters {
@@ -261,6 +246,7 @@ pub fn handle_initialize_pool_with_dynamic_config<'c: 'info, 'info>(
         liquidity,
         collect_fee_mode,
         pool_type,
+        position_type,
     );
 
     let mut position = ctx.accounts.position.load_init()?;
@@ -273,6 +259,22 @@ pub fn handle_initialize_pool_with_dynamic_config<'c: 'info, 'info>(
 
     // create position nft
     drop(position);
+
+    // initialize position nft mint
+    initialize_position_nft(
+        ctx.accounts.payer.to_account_info(),
+        ctx.accounts.position_nft_mint.to_account_info(),
+        ctx.accounts.pool_authority.to_account_info(),
+        ctx.accounts.position_nft_account.to_account_info(),
+        ctx.accounts.pool.to_account_info(),
+        ctx.accounts.creator.to_account_info(),
+        ctx.accounts.system_program.to_account_info(),
+        ctx.accounts.token_2022_program.to_account_info(),
+        ctx.bumps.position_nft_account,
+        position_type,
+    )?;
+
+    // create and mint position nft
     create_position_nft(
         ctx.accounts.payer.to_account_info(),
         ctx.accounts.position_nft_mint.to_account_info(),

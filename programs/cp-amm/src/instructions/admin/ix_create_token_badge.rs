@@ -2,8 +2,11 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_interface::Mint;
 
 use crate::{
-    assert_eq_admin, constants::seeds::TOKEN_BADGE_PREFIX, state::TokenBadge,
-    token::is_supported_mint, EvtCreateTokenBadge, PoolError,
+    assert_eq_admin,
+    constants::seeds::TOKEN_BADGE_PREFIX,
+    state::{PositionType, TokenBadge},
+    token::is_supported_mint,
+    EvtCreateTokenBadge, PoolError,
 };
 
 #[event_cpi]
@@ -32,13 +35,22 @@ pub struct CreateTokenBadgeCtx<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn handle_create_token_badge(ctx: Context<CreateTokenBadgeCtx>) -> Result<()> {
+pub fn handle_create_token_badge(
+    ctx: Context<CreateTokenBadgeCtx>,
+    immutable_position_owner: u8,
+) -> Result<()> {
     require!(
         !is_supported_mint(&ctx.accounts.token_mint)?,
         PoolError::CannotCreateTokenBadgeOnSupportedMint
     );
+    // validate position type
+    require!(
+        PositionType::try_from(immutable_position_owner).is_ok(),
+        PoolError::InvalidPositionType
+    );
+
     let mut token_badge = ctx.accounts.token_badge.load_init()?;
-    token_badge.initialize(ctx.accounts.token_mint.key())?;
+    token_badge.initialize(ctx.accounts.token_mint.key(), immutable_position_owner)?;
 
     emit_cpi!(EvtCreateTokenBadge {
         token_mint: ctx.accounts.token_mint.key(),

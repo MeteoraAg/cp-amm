@@ -257,17 +257,18 @@ export async function closeConfigIx(
 export type CreateTokenBadgeParams = {
   tokenMint: PublicKey;
   admin: Keypair;
+  immutablePosition: number;
 };
 
 export async function createTokenBadge(
   banksClient: BanksClient,
   params: CreateTokenBadgeParams
 ) {
-  const { tokenMint, admin } = params;
+  const { tokenMint, admin, immutablePosition } = params;
   const program = createCpAmmProgram();
   const tokenBadge = deriveTokenBadgeAddress(tokenMint);
   const transaction = await program.methods
-    .createTokenBadge()
+    .createTokenBadge(immutablePosition)
     .accountsPartial({
       tokenBadge,
       tokenMint,
@@ -1249,7 +1250,7 @@ export async function createPosition(
       payer: payer.publicKey,
       pool,
       position,
-      tokenProgram: TOKEN_2022_PROGRAM_ID,
+      token2022Program: TOKEN_2022_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
     })
     .transaction();

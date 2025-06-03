@@ -51,8 +51,11 @@ pub mod cp_amm {
         instructions::handle_create_dynamic_config(ctx, index, config_parameters)
     }
 
-    pub fn create_token_badge(ctx: Context<CreateTokenBadgeCtx>) -> Result<()> {
-        instructions::handle_create_token_badge(ctx)
+    pub fn create_token_badge(
+        ctx: Context<CreateTokenBadgeCtx>,
+        immutable_position_owner: u8,
+    ) -> Result<()> {
+        instructions::handle_create_token_badge(ctx, immutable_position_owner)
     }
 
     pub fn create_claim_fee_operator(ctx: Context<CreateClaimFeeOperatorCtx>) -> Result<()> {
