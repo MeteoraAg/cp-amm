@@ -4,7 +4,6 @@ use anchor_lang::{
     system_program::{create_account, CreateAccount},
 };
 use anchor_spl::{
-    token::TokenAccount,
     token_2022::{
         self, initialize_account3, initialize_mint2,
         spl_token_2022::{
@@ -173,7 +172,7 @@ pub fn initialize_position_nft<'info>(
     )?;
 
     // initialize token extensions
-    for e in extensions {
+    for e in extensions.clone() {
         match e {
             ExtensionType::MetadataPointer => {
                 let ix = metadata_pointer::instruction::initialize(
@@ -201,7 +200,7 @@ pub fn initialize_position_nft<'info>(
             ExtensionType::NonTransferable => {
                 let ix = spl_token_2022::instruction::initialize_non_transferable_mint(
                     token2022_program.key,
-                    position_nft_account.key,
+                    position_nft_mint.key,
                 )?;
                 solana_program::program::invoke(
                     &ix,
@@ -230,8 +229,12 @@ pub fn initialize_position_nft<'info>(
     // create token account
     let position_nft_account_seeds =
         position_nft_account_seeds!(position_nft_mint.key, position_nft_account_bump);
-    let space = TokenAccount::LEN;
-    let lamports = Rent::get()?.minimum_balance(space);
+
+    let token_account_space = ExtensionType::try_calculate_account_len::<
+        spl_token_2022::state::Account,
+    >(&extensions.clone())?;
+    let lamports = Rent::get()?.minimum_balance(token_account_space);
+
     create_account(
         CpiContext::new_with_signer(
             system_program.clone(),
@@ -242,10 +245,20 @@ pub fn initialize_position_nft<'info>(
             &[&position_nft_account_seeds[..]],
         ),
         lamports,
-        space as u64,
+        token_account_space as u64,
         token2022_program.key,
     )?;
 
+    if position_type == PositionType::Immutable {
+        let ix = spl_token_2022::instruction::initialize_immutable_owner(
+            token2022_program.key,
+            position_nft_account.key,
+        )?;
+        solana_program::program::invoke(
+            &ix,
+            &[token2022_program.clone(), position_nft_account.clone()],
+        )?;
+    }
     // create user position nft account
     initialize_account3(CpiContext::new_with_signer(
         token2022_program.clone(),

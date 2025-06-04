@@ -1,3 +1,5 @@
+use std::cmp::max;
+
 use anchor_lang::prelude::*;
 use anchor_spl::{
     token_2022::Token2022,
@@ -21,7 +23,7 @@ use crate::{
     state::{CollectFeeMode, Pool, PoolType, Position, PositionType},
     token::{
         calculate_transfer_fee_included_amount, get_token_program_flags, is_supported_mint,
-        transfer_from_user, validate_and_get_position_type,
+        transfer_from_user, validate_token_badge_and_get_position_type,
     },
     EvtCreatePosition, EvtInitializePool, PoolError,
 };
@@ -221,10 +223,12 @@ pub fn handle_initialize_customizable_pool<'c: 'info, 'info>(
             .remaining_accounts
             .get(0)
             .ok_or(PoolError::InvalidTokenBadge)?;
-        let position_type_a =
-            validate_and_get_position_type(ctx.accounts.token_a_mint.key(), token_badge)?;
+        let position_type_a = validate_token_badge_and_get_position_type(
+            ctx.accounts.token_a_mint.key(),
+            token_badge,
+        )?;
 
-        position_type = std::cmp::max(position_type, position_type_a);
+        position_type = max(position_type, position_type_a);
     }
 
     if !is_supported_mint(&ctx.accounts.token_b_mint)? {
@@ -232,10 +236,12 @@ pub fn handle_initialize_customizable_pool<'c: 'info, 'info>(
             .remaining_accounts
             .get(1)
             .ok_or(PoolError::InvalidTokenBadge)?;
-        let position_type_b =
-            validate_and_get_position_type(ctx.accounts.token_b_mint.key(), token_badge)?;
+        let position_type_b = validate_token_badge_and_get_position_type(
+            ctx.accounts.token_b_mint.key(),
+            token_badge,
+        )?;
 
-        position_type = std::cmp::max(position_type, position_type_b);
+        position_type = max(position_type, position_type_b);
     }
 
     let InitializeCustomizablePoolParameters {

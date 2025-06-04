@@ -21,6 +21,7 @@ import {
   getMintCloseAuthority,
   MintCloseAuthorityLayout,
   MetadataPointerLayout,
+  NonTransferableLayout,
 } from "@solana/spl-token";
 import { unpack } from "@solana/spl-token-metadata";
 import {
@@ -515,6 +516,20 @@ export async function initializePool(
     tokenBProgram
   );
 
+  const remainingAccounts = [
+    {
+      pubkey: deriveTokenBadgeAddress(tokenAMint),
+      isWritable: false,
+      isSigner: false,
+    },
+
+    {
+      pubkey: deriveTokenBadgeAddress(tokenBMint),
+      isWritable: false,
+      isSigner: false,
+    },
+  ];
+
   let transaction = await program.methods
     .initializePool({
       liquidity: liquidity,
@@ -541,6 +556,7 @@ export async function initializePool(
       tokenBProgram,
       systemProgram: SystemProgram.programId,
     })
+    .remainingAccounts(remainingAccounts)
     .transaction();
   // requires more compute budget than usual
   transaction.add(
@@ -795,6 +811,19 @@ export async function initializeCustomizeablePool(
     true,
     tokenBProgram
   );
+  const remainingAccounts = [
+    {
+      pubkey: deriveTokenBadgeAddress(tokenAMint),
+      isWritable: false,
+      isSigner: false,
+    },
+
+    {
+      pubkey: deriveTokenBadgeAddress(tokenBMint),
+      isWritable: false,
+      isSigner: false,
+    },
+  ];
 
   const transaction = await program.methods
     .initializeCustomizablePool({
@@ -827,6 +856,7 @@ export async function initializeCustomizeablePool(
       tokenBProgram,
       systemProgram: SystemProgram.programId,
     })
+    .remainingAccounts(remainingAccounts)
     .transaction();
   // requires more compute budget than usual
   transaction.add(
@@ -850,6 +880,48 @@ export async function initializeCustomizeablePool(
 
   expect(poolState.rewardInfos[0].initialized).eq(0);
   expect(poolState.rewardInfos[1].initialized).eq(0);
+
+  // validate position
+  const positionState = await getPosition(banksClient, position);
+
+  expect(positionState.nftMint.toString()).eq(
+    positionNftKP.publicKey.toString()
+  );
+
+  const positionNftData = AccountLayout.decode(
+    (await banksClient.getAccount(positionNftAccount)).data
+  );
+
+  // validate metadata
+  const tlvData = (
+    await banksClient.getAccount(positionState.nftMint)
+  ).data.slice(ACCOUNT_SIZE + ACCOUNT_TYPE_SIZE);
+  const metadata = unpack(
+    getExtensionData(ExtensionType.TokenMetadata, Buffer.from(tlvData))
+  );
+  expect(metadata.name).eq("Meteora Position NFT");
+  expect(metadata.symbol).eq("MPN");
+
+  // validate metadata pointer
+  const metadataAddress = MetadataPointerLayout.decode(
+    getExtensionData(ExtensionType.MetadataPointer, Buffer.from(tlvData))
+  ).metadataAddress;
+  expect(metadataAddress.toString()).eq(positionState.nftMint.toString());
+
+  // validate owner
+  expect(positionNftData.owner.toString()).eq(creator.toString());
+  expect(Number(positionNftData.amount)).eq(1);
+  expect(positionNftData.mint.toString()).eq(
+    positionNftKP.publicKey.toString()
+  );
+
+  // validate non-transferable
+  if (poolState.positionType == 1) {
+    const nonTransferable = NonTransferableLayout.decode(
+      getExtensionData(ExtensionType.NonTransferable, Buffer.from(tlvData))
+    );
+    expect(nonTransferable).not.be.null;
+  }
 
   return { pool, position: position };
 }
@@ -1261,6 +1333,7 @@ export async function createPosition(
   await processTransactionMaybeThrow(banksClient, transaction);
 
   const positionState = await getPosition(banksClient, position);
+  const poolState = await getPool(banksClient, pool);
 
   expect(positionState.nftMint.toString()).eq(
     positionNftKP.publicKey.toString()
@@ -1292,6 +1365,14 @@ export async function createPosition(
   expect(positionNftData.mint.toString()).eq(
     positionNftKP.publicKey.toString()
   );
+
+  // validate non-transferable
+  if (poolState.positionType == 1) {
+    const nonTransferable = NonTransferableLayout.decode(
+      getExtensionData(ExtensionType.NonTransferable, Buffer.from(tlvData))
+    );
+    expect(nonTransferable).not.be.null;
+  }
 
   return position;
 }

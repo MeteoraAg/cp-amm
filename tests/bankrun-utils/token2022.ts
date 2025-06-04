@@ -4,8 +4,12 @@ import {
   ExtensionType,
   getMintLen,
   TOKEN_2022_PROGRAM_ID,
-  createInitializeMetadataPointerInstruction,
   createMintToInstruction,
+  createInitializeDefaultAccountStateInstruction,
+  AccountState,
+  createInitializePermanentDelegateInstruction,
+  createAccount,
+  mintTo,
 } from "@solana/spl-token";
 import {
   Keypair,
@@ -33,22 +37,42 @@ export async function createToken2022(
   const mintLamports = (await banksClient.getRent()).minimumBalance(
     BigInt(mintLen)
   );
-  const transaction = new Transaction().add(
+  const instructions = [];
+  instructions.push(
     SystemProgram.createAccount({
       fromPubkey: payer.publicKey,
       newAccountPubkey: mintKeypair.publicKey,
       space: mintLen,
       lamports: Number(mintLamports.toString()),
       programId: TOKEN_2022_PROGRAM_ID,
-    }),
-    createInitializeTransferFeeConfigInstruction(
-      mintKeypair.publicKey,
-      transferFeeConfigAuthority.publicKey,
-      withdrawWithheldAuthority.publicKey,
-      feeBasisPoints,
-      maxFee,
-      TOKEN_2022_PROGRAM_ID
-    ),
+    })
+  );
+
+  for (const extension of extensions) {
+    if (extension == ExtensionType.TransferFeeConfig) {
+      instructions.push(
+        createInitializeTransferFeeConfigInstruction(
+          mintKeypair.publicKey,
+          transferFeeConfigAuthority.publicKey,
+          withdrawWithheldAuthority.publicKey,
+          feeBasisPoints,
+          maxFee,
+          TOKEN_2022_PROGRAM_ID
+        )
+      );
+    }
+    if (extension == ExtensionType.DefaultAccountState) {
+      instructions.push(
+        createInitializeDefaultAccountStateInstruction(
+          mintKeypair.publicKey,
+          AccountState.Initialized,
+          TOKEN_2022_PROGRAM_ID
+        )
+      );
+    }
+  }
+
+  instructions.push(
     createInitializeMint2Instruction(
       mintKeypair.publicKey,
       DECIMALS,
@@ -57,6 +81,8 @@ export async function createToken2022(
       TOKEN_2022_PROGRAM_ID
     )
   );
+
+  const transaction = new Transaction().add(...instructions);
 
   const [recentBlockhash] = await banksClient.getLatestBlockhash();
   transaction.recentBlockhash = recentBlockhash;
