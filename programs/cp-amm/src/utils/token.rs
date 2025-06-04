@@ -251,6 +251,18 @@ pub fn is_token_badge_initialized<'c: 'info, 'info>(
     Ok(token_badge.token_mint == mint)
 }
 
+pub fn validate_token_badge_and_get_position_type<'c: 'info, 'info>(
+    mint: Pubkey,
+    token_badge: &'c AccountInfo<'info>,
+) -> Result<u8> {
+    let token_badge: AccountLoader<'_, TokenBadge> = AccountLoader::try_from(token_badge)?;
+    let token_badge = token_badge.load()?;
+    //validate token badge
+    require!(token_badge.token_mint == mint, PoolError::InvalidTokenBadge);
+
+    Ok(token_badge.immutable_position_owner)
+}
+
 pub fn update_account_lamports_to_minimum_balance<'info>(
     account: AccountInfo<'info>,
     payer: AccountInfo<'info>,

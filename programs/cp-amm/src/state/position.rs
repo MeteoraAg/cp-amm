@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 use ruint::aliases::U256;
 use static_assertions::const_assert_eq;
 use std::{cell::RefMut, u64};
@@ -10,6 +11,25 @@ use crate::{
     utils_math::safe_mul_shr_256_cast,
     PoolError,
 };
+
+// position type
+#[repr(u8)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    IntoPrimitive,
+    TryFromPrimitive,
+    AnchorDeserialize,
+    AnchorSerialize,
+    Default,
+)]
+pub enum PositionType {
+    #[default]
+    Mutable,
+    Immutable,
+}
 
 #[zero_copy]
 #[derive(Default, Debug, InitSpace, PartialEq)]

@@ -130,4 +130,10 @@ pub enum PoolError {
 
     #[msg("Invalid config type")]
     InvalidConfigType,
+
+    #[msg("Invalid position type")]
+    InvalidPositionType,
+
+    #[msg("Invalid extension")]
+    InvalidExtension,
 }

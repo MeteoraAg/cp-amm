@@ -1,13 +1,24 @@
-use anchor_lang::prelude::*;
+use anchor_lang::{
+    prelude::*,
+    solana_program,
+    system_program::{create_account, CreateAccount},
+};
 use anchor_spl::{
-    token_2022::{self, Token2022},
-    token_interface::{token_metadata_initialize, Mint, TokenAccount, TokenMetadataInitialize},
+    token_2022::{
+        self, initialize_account3, initialize_mint2,
+        spl_token_2022::{
+            self,
+            extension::{metadata_pointer, ExtensionType},
+        },
+        InitializeAccount3, InitializeMint2, Token2022,
+    },
+    token_interface::{token_metadata_initialize, TokenMetadataInitialize},
 };
 
 use crate::{
     constants::seeds::{POOL_AUTHORITY_PREFIX, POSITION_NFT_ACCOUNT_PREFIX, POSITION_PREFIX},
     get_pool_access_validator,
-    state::{Pool, Position},
+    state::{Pool, Position, PositionType},
     token::update_account_lamports_to_minimum_balance,
     EvtCreatePosition, PoolError,
 };
@@ -18,32 +29,17 @@ pub struct CreatePositionCtx<'info> {
     /// CHECK: Receives the position NFT
     pub owner: UncheckedAccount<'info>,
 
-    /// position_nft_mint
-    #[account(
-        init,
-        signer,
-        payer = payer,
-        mint::token_program = token_program,
-        mint::decimals = 0,
-        mint::authority = pool_authority,
-        mint::freeze_authority = pool, // use pool, so we can filter all position_nft_mint given pool address
-        extensions::metadata_pointer::authority = pool_authority,
-        extensions::metadata_pointer::metadata_address = position_nft_mint,
-        extensions::close_authority::authority = pool_authority,
-    )]
-    pub position_nft_mint: Box<InterfaceAccount<'info, Mint>>,
+    /// CHECK: Unique token mint address, initialize in program
+    #[account(mut)]
+    pub position_nft_mint: Signer<'info>,
 
-    /// position nft account
+    /// CHECK: position nft account
     #[account(
-        init,
+        mut,
         seeds = [POSITION_NFT_ACCOUNT_PREFIX.as_ref(), position_nft_mint.key().as_ref()],
-        token::mint = position_nft_mint,
-        token::authority = owner,
-        token::token_program = token_program,
-        payer = payer,
-        bump,
+        bump
     )]
-    pub position_nft_account: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub position_nft_account: UncheckedAccount<'info>,
 
     #[account(mut)]
     pub pool: AccountLoader<'info, Pool>,
@@ -69,7 +65,7 @@ pub struct CreatePositionCtx<'info> {
     pub payer: Signer<'info>,
 
     /// Program to create NFT mint/token account and transfer for token22 account
-    pub token_program: Program<'info, Token2022>,
+    pub token_2022_program: Program<'info, Token2022>,
 
     pub system_program: Program<'info, System>,
 }
@@ -98,12 +94,26 @@ pub fn handle_create_position(ctx: Context<CreatePositionCtx>) -> Result<()> {
     )?;
 
     drop(position);
+    // initialize position nft mint
+    initialize_position_nft(
+        ctx.accounts.payer.to_account_info(),
+        ctx.accounts.position_nft_mint.to_account_info(),
+        ctx.accounts.pool_authority.to_account_info(),
+        ctx.accounts.position_nft_account.to_account_info(),
+        ctx.accounts.pool.to_account_info(),
+        ctx.accounts.owner.to_account_info(),
+        ctx.accounts.system_program.to_account_info(),
+        ctx.accounts.token_2022_program.to_account_info(),
+        ctx.bumps.position_nft_account,
+        pool.position_type,
+    )?;
+    // create and mint position nft
     create_position_nft(
         ctx.accounts.payer.to_account_info(),
         ctx.accounts.position_nft_mint.to_account_info(),
         ctx.accounts.pool_authority.to_account_info(),
         ctx.accounts.system_program.to_account_info(),
-        ctx.accounts.token_program.to_account_info(),
+        ctx.accounts.token_2022_program.to_account_info(),
         ctx.accounts.position_nft_account.to_account_info(),
         ctx.bumps.pool_authority,
     )?;
@@ -114,6 +124,151 @@ pub fn handle_create_position(ctx: Context<CreatePositionCtx>) -> Result<()> {
         position: ctx.accounts.position.key(),
         position_nft_mint: ctx.accounts.position_nft_mint.key(),
     });
+
+    Ok(())
+}
+
+pub fn initialize_position_nft<'info>(
+    payer: AccountInfo<'info>,
+    position_nft_mint: AccountInfo<'info>,
+    pool_authority: AccountInfo<'info>,
+    position_nft_account: AccountInfo<'info>,
+    pool: AccountInfo<'info>,
+    owner: AccountInfo<'info>,
+    system_program: AccountInfo<'info>,
+    token2022_program: AccountInfo<'info>,
+    position_nft_account_bump: u8,
+    position_type: u8,
+) -> Result<()> {
+    let position_type =
+        PositionType::try_from(position_type).map_err(|_| PoolError::TypeCastFailed)?;
+
+    let mut extensions = vec![
+        ExtensionType::MintCloseAuthority,
+        ExtensionType::MetadataPointer,
+    ];
+
+    if position_type == PositionType::Immutable {
+        extensions.push(ExtensionType::NonTransferable);
+    }
+
+    let space =
+        ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(&extensions)?;
+
+    let lamports = Rent::get()?.minimum_balance(space);
+
+    // create mint account
+    create_account(
+        CpiContext::new(
+            system_program.clone(),
+            CreateAccount {
+                from: payer.clone(),
+                to: position_nft_mint.clone(),
+            },
+        ),
+        lamports,
+        space as u64,
+        token2022_program.key,
+    )?;
+
+    // initialize token extensions
+    for e in extensions.clone() {
+        match e {
+            ExtensionType::MetadataPointer => {
+                let ix = metadata_pointer::instruction::initialize(
+                    token2022_program.key,
+                    position_nft_mint.key,
+                    Some(pool_authority.key()),
+                    Some(position_nft_mint.key()),
+                )?;
+                solana_program::program::invoke(
+                    &ix,
+                    &[token2022_program.clone(), position_nft_mint.clone()],
+                )?;
+            }
+            ExtensionType::MintCloseAuthority => {
+                let ix = spl_token_2022::instruction::initialize_mint_close_authority(
+                    token2022_program.key,
+                    position_nft_mint.key,
+                    Some(pool_authority.key),
+                )?;
+                solana_program::program::invoke(
+                    &ix,
+                    &[token2022_program.clone(), position_nft_mint.clone()],
+                )?;
+            }
+            ExtensionType::NonTransferable => {
+                let ix = spl_token_2022::instruction::initialize_non_transferable_mint(
+                    token2022_program.key,
+                    position_nft_mint.key,
+                )?;
+                solana_program::program::invoke(
+                    &ix,
+                    &[token2022_program.clone(), position_nft_mint.clone()],
+                )?;
+            }
+            _ => {
+                return err!(PoolError::InvalidExtension);
+            }
+        }
+    }
+
+    // initialize mint account
+    initialize_mint2(
+        CpiContext::new(
+            token2022_program.clone(),
+            InitializeMint2 {
+                mint: position_nft_mint.clone(),
+            },
+        ),
+        0,
+        pool_authority.key,
+        Some(pool.key),
+    )?;
+
+    // create token account
+    let position_nft_account_seeds =
+        position_nft_account_seeds!(position_nft_mint.key, position_nft_account_bump);
+
+    let token_account_space = ExtensionType::try_calculate_account_len::<
+        spl_token_2022::state::Account,
+    >(&extensions.clone())?;
+    let lamports = Rent::get()?.minimum_balance(token_account_space);
+
+    create_account(
+        CpiContext::new_with_signer(
+            system_program.clone(),
+            CreateAccount {
+                from: payer.clone(),
+                to: position_nft_account.clone(),
+            },
+            &[&position_nft_account_seeds[..]],
+        ),
+        lamports,
+        token_account_space as u64,
+        token2022_program.key,
+    )?;
+
+    if position_type == PositionType::Immutable {
+        let ix = spl_token_2022::instruction::initialize_immutable_owner(
+            token2022_program.key,
+            position_nft_account.key,
+        )?;
+        solana_program::program::invoke(
+            &ix,
+            &[token2022_program.clone(), position_nft_account.clone()],
+        )?;
+    }
+    // create user position nft account
+    initialize_account3(CpiContext::new_with_signer(
+        token2022_program.clone(),
+        InitializeAccount3 {
+            account: position_nft_account.clone(),
+            mint: position_nft_mint.clone(),
+            authority: owner.clone(),
+        },
+        &[&position_nft_account_seeds[..]],
+    ))?;
 
     Ok(())
 }
