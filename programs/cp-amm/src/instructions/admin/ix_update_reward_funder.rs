@@ -24,15 +24,7 @@ impl<'info> UpdateRewardFunderCtx<'info> {
 
         require!(reward_info.funder != new_funder, PoolError::IdenticalFunder);
 
-        if reward_index == 0 {
-            // only pool creator is allowed to initialize reward with index 0
-            require!(
-                pool.creator == self.signer.key(),
-                PoolError::InvalidPoolCreator
-            );
-        } else {
-            require!(assert_eq_admin(self.signer.key()), PoolError::InvalidAdmin);
-        }
+        pool.validate_authority_to_edit_reward(reward_index, self.signer.key())?;
 
         Ok(())
     }

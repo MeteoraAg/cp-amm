@@ -739,6 +739,21 @@ impl Pool {
     pub fn fee_b_per_liquidity(&self) -> U256 {
         U256::from_le_bytes(self.fee_b_per_liquidity)
     }
+
+    pub fn validate_authority_to_edit_reward(
+        &self,
+        reward_index: usize,
+        signer: Pubkey,
+    ) -> Result<()> {
+        // legacy pools would have creator's pubkey as Pubkey::default()
+        if reward_index == 0 && self.creator.ne(&Pubkey::default()) {
+            // only pool creator is allowed to initialize reward with index 0
+            require!(self.creator == signer, PoolError::InvalidPoolCreator);
+        } else {
+            require!(assert_eq_admin(signer), PoolError::InvalidAdmin);
+        }
+        Ok(())
+    }
 }
 
 /// Encodes all results of swapping
