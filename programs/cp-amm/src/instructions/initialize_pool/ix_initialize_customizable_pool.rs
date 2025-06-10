@@ -292,6 +292,7 @@ pub fn handle_initialize_customizable_pool<'c: 'info, 'info>(
     );
     let pool_type: u8 = PoolType::Customizable.into();
     pool.initialize(
+        ctx.accounts.creator.key(),
         pool_fees.to_pool_fees_struct(),
         ctx.accounts.token_a_mint.key(),
         ctx.accounts.token_b_mint.key(),

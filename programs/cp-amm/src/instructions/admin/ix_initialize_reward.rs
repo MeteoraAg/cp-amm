@@ -28,7 +28,7 @@ pub struct InitializeRewardCtx<'info> {
         init,
         seeds = [REWARD_VAULT_PREFIX.as_ref(), pool.key().as_ref(), reward_index.to_le_bytes().as_ref()],
         bump,
-        payer = admin,
+        payer = payer,
         token::mint = reward_mint,
         token::authority = pool_authority
     )]
@@ -36,11 +36,10 @@ pub struct InitializeRewardCtx<'info> {
 
     pub reward_mint: Box<InterfaceAccount<'info, Mint>>,
 
-    #[account(
-        mut,
-        constraint = assert_eq_admin(admin.key()) @ PoolError::InvalidAdmin,
-    )]
-    pub admin: Signer<'info>,
+    pub signer: Signer<'info>,
+
+    #[account(mut)]
+    pub payer: Signer<'info>,
 
     pub token_program: Interface<'info, TokenInterface>,
 
@@ -60,6 +59,8 @@ impl<'info> InitializeRewardCtx<'info> {
 
         let reward_info = &pool.reward_infos[reward_index];
         require!(!reward_info.initialized(), PoolError::RewardInitialized);
+
+        pool.validate_authority_to_edit_reward(reward_index, self.signer.key())?;
 
         Ok(())
     }

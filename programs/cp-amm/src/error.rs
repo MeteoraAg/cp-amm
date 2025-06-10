@@ -130,4 +130,7 @@ pub enum PoolError {
 
     #[msg("Invalid config type")]
     InvalidConfigType,
+
+    #[msg("Invalid pool creator")]
+    InvalidPoolCreator,
 }
