@@ -15,6 +15,7 @@ pub mod event;
 pub use event::*;
 pub mod utils;
 pub use utils::*;
+pub mod base_fee;
 pub mod math;
 pub use math::*;
 pub mod curve;

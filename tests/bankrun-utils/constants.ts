@@ -18,6 +18,13 @@ export const DECIMALS = 6;
 export const BASIS_POINT_MAX = 10_000;
 export const OFFSET = 64;
 export const U64_MAX = new BN("18446744073709551615");
+export const MAX_FEE_BPS = 9900;
+export const MAX_FEE_NUMERATOR = 990_000_000;
+export const MIN_FEE_NUMERATOR = 100_000
+export const FEE_DENOMINATOR = 1_000_000_000;
+
+export const  MAX_RATE_LIMITER_DURATION_IN_SECONDS = 60 * 60 * 12; // 12 hours
+export const MAX_RATE_LIMITER_DURATION_IN_SLOTS = 108000; // 12 hours
 
 // Set the decimals, fee basis points, and maximum fee
 export const FEE_BASIS_POINT = 100; // 1%

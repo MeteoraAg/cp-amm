@@ -130,4 +130,16 @@ pub enum PoolError {
 
     #[msg("Invalid config type")]
     InvalidConfigType,
+
+    #[msg("Invalid base fee mode")]
+    InvalidBaseFeeMode,
+
+    #[msg("Invalid fee rate limiter")]
+    InvalidFeeRateLimiter,
+
+    #[msg("Fail to validate single swap instruction in rate limiter")]
+    FailToValidateSingleSwapInstruction,
+
+    #[msg("Invalid fee scheduler")]
+    InvalidFeeScheduler,
 }

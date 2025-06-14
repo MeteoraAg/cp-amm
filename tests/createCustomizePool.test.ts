@@ -9,10 +9,12 @@ import {
   MIN_SQRT_PRICE,
   mintSplTokenTo,
   createToken,
+  getPool,
 } from "./bankrun-utils";
 import BN from "bn.js";
 import { ExtensionType } from "@solana/spl-token";
 import { createToken2022, mintToToken2022 } from "./bankrun-utils/token2022";
+import { expect } from "chai";
 
 describe("Initialize customizable pool", () => {
   describe("SPL-Token", () => {
@@ -69,10 +71,10 @@ describe("Initialize customizable pool", () => {
         poolFees: {
           baseFee: {
             cliffFeeNumerator: new BN(2_500_000),
-            numberOfPeriod: 0,
-            reductionFactor: new BN(0),
-            periodFrequency: new BN(0),
-            feeSchedulerMode: 0,
+            firstFactor: 0,
+            secondFactor: new BN(0),
+            thirdFactor: new BN(0),
+            baseFeeMode: 0,
           },
           protocolFeePercent: 20,
           partnerFeePercent: 0,
@@ -142,10 +144,10 @@ describe("Initialize customizable pool", () => {
         poolFees: {
           baseFee: {
             cliffFeeNumerator: new BN(2_500_000),
-            numberOfPeriod: 0,
-            reductionFactor: new BN(0),
-            periodFrequency: new BN(0),
-            feeSchedulerMode: 0,
+            firstFactor: 0,
+            secondFactor: new BN(0),
+            thirdFactor: new BN(0),
+            baseFeeMode: 0,
           },
           protocolFeePercent: 20,
           partnerFeePercent: 0,
@@ -156,7 +158,9 @@ describe("Initialize customizable pool", () => {
         collectFeeMode: 0,
       };
 
-      await initializeCustomizeablePool(context.banksClient, params);
+      const { pool } = await initializeCustomizeablePool(context.banksClient, params);
+      const poolState = await getPool(context.banksClient, pool);
+      expect(poolState.version).eq(1);
     });
   });
 });
