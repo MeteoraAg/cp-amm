@@ -313,36 +313,4 @@ impl PartnerInfo {
 
         Ok(())
     }
-
-    pub fn accrue_partner_fees(
-        &mut self,
-        protocol_fee: u64,
-        trade_direction: TradeDirection,
-    ) -> Result<()> {
-        if self.fee_percent > 0 {
-            let partner_profit = protocol_fee
-                .safe_mul(self.fee_percent.into())?
-                .safe_div(100)?;
-
-            match trade_direction {
-                TradeDirection::AtoB => {
-                    self.pending_fee_a = self.pending_fee_a.safe_add(partner_profit)?;
-                }
-                TradeDirection::BtoA => {
-                    self.pending_fee_b = self.pending_fee_b.safe_add(partner_profit)?;
-                }
-            }
-        }
-        Ok(())
-    }
-
-    pub fn claim_fees(&mut self, max_amount_a: u64, max_amount_b: u64) -> Result<(u64, u64)> {
-        let claimable_amount_a = max_amount_a.min(self.pending_fee_a);
-        let claimable_amount_b = max_amount_b.min(self.pending_fee_b);
-
-        self.pending_fee_a = self.pending_fee_a.safe_sub(claimable_amount_a)?;
-        self.pending_fee_b = self.pending_fee_b.safe_sub(claimable_amount_b)?;
-
-        Ok((claimable_amount_a, claimable_amount_b))
-    }
 }

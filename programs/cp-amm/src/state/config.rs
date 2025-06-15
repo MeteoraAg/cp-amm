@@ -303,14 +303,6 @@ impl Config {
         self.config_type = ConfigType::Dynamic.into();
     }
 
-    pub fn to_bootstrapping_config(&self, activation_point: u64) -> BootstrappingConfig {
-        BootstrappingConfig {
-            activation_point,
-            vault_config_key: self.vault_config_key,
-            activation_type: self.activation_type,
-        }
-    }
-
     pub fn get_partner_info(&self) -> PartnerInfo {
         PartnerInfo {
             partner_authority: self.pool_creator_authority,
