@@ -9,30 +9,33 @@ import {
   createConfigIx,
   CreateConfigParams,
   createPosition,
+  createToken,
   getPool,
   getPosition,
   getVesting,
   initializePool,
   InitializePoolParams,
-  MIN_LP_AMOUNT,
   lockPosition,
   LockPositionParams,
   MAX_SQRT_PRICE,
+  MIN_LP_AMOUNT,
   MIN_SQRT_PRICE,
+  mintSplTokenTo,
   permanentLockPosition,
   refreshVestings,
   swap,
   SwapParams,
-  mintSplTokenTo,
-  createToken,
 } from "./bankrun-utils";
 import {
   generateKpAndFund,
   startTest,
   warpSlotBy,
 } from "./bankrun-utils/common";
-import { ExtensionType } from "@solana/spl-token";
-import { createToken2022, mintToToken2022 } from "./bankrun-utils/token2022";
+import {
+  createToken2022,
+  createTransferFeeExtensionWithInstruction,
+  mintToToken2022,
+} from "./bankrun-utils/token2022";
 
 describe("Lock position", () => {
   describe("SPL Token", () => {
@@ -360,9 +363,9 @@ describe("Lock position", () => {
     let sqrtPrice: BN;
     let pool: PublicKey;
     let position: PublicKey;
+    let liquidityDelta: BN;
     let tokenAMint: PublicKey;
     let tokenBMint: PublicKey;
-    let liquidityDelta: BN;
 
     const configId = Math.floor(Math.random() * 1000);
     const vestings: PublicKey[] = [];
@@ -370,20 +373,34 @@ describe("Lock position", () => {
     before(async () => {
       const root = Keypair.generate();
       context = await startTest(root);
-      const extensions = [ExtensionType.TransferFeeConfig];
+
+      const tokenAMintKeypair = Keypair.generate();
+      const tokenBMintKeypair = Keypair.generate();
+
+      tokenAMint = tokenAMintKeypair.publicKey;
+      tokenBMint = tokenBMintKeypair.publicKey;
+
+      const tokenAExtensions = [
+        createTransferFeeExtensionWithInstruction(tokenAMint),
+      ];
+      const tokenBExtensions = [
+        createTransferFeeExtensionWithInstruction(tokenBMint),
+      ];
       user = await generateKpAndFund(context.banksClient, context.payer);
       admin = await generateKpAndFund(context.banksClient, context.payer);
       creator = await generateKpAndFund(context.banksClient, context.payer);
 
-      tokenAMint = await createToken2022(
+      await createToken2022(
         context.banksClient,
         context.payer,
-        extensions
+        tokenAExtensions,
+        tokenAMintKeypair
       );
-      tokenBMint = await createToken2022(
+      await createToken2022(
         context.banksClient,
         context.payer,
-        extensions
+        tokenBExtensions,
+        tokenBMintKeypair
       );
 
       await mintToToken2022(

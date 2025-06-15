@@ -124,6 +124,10 @@ pub mod cp_amm {
         instructions::handle_claim_partner_fee(ctx, max_amount_a, max_amount_b)
     }
 
+    pub fn close_token_badge(_ctx: Context<CloseTokenBadgeCtx>) -> Result<()> {
+        Ok(())
+    }
+
     /// USER FUNCTIONS ////
 
     pub fn initialize_pool<'c: 'info, 'info>(

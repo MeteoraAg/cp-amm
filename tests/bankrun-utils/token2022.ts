@@ -6,30 +6,70 @@ import {
   TOKEN_2022_PROGRAM_ID,
   createInitializeMetadataPointerInstruction,
   createMintToInstruction,
+  createInitializePermanentDelegateInstruction,
 } from "@solana/spl-token";
 import {
   Keypair,
   PublicKey,
   SystemProgram,
   Transaction,
+  TransactionInstruction,
 } from "@solana/web3.js";
 import { BanksClient } from "solana-bankrun";
 import { DECIMALS } from "./constants";
 import { getOrCreateAssociatedTokenAccount } from "./token";
 const rawAmount = 1_000_000 * 10 ** DECIMALS; // 1 millions
 
+interface ExtensionWithInstruction {
+  extension: ExtensionType;
+  instruction: TransactionInstruction;
+}
+
+export function createPermenantDelegateExtensionWithInstruction(
+  mint: PublicKey,
+  permenantDelegate: PublicKey
+): ExtensionWithInstruction {
+  return {
+    extension: ExtensionType.PermanentDelegate,
+    instruction: createInitializePermanentDelegateInstruction(
+      mint,
+      permenantDelegate,
+      TOKEN_2022_PROGRAM_ID
+    ),
+  };
+}
+
+export function createTransferFeeExtensionWithInstruction(
+  mint: PublicKey,
+  maxFee?: bigint,
+  feeBasisPoint?: number,
+  transferFeeConfigAuthority?: Keypair,
+  withdrawWithheldAuthority?: Keypair
+): ExtensionWithInstruction {
+  maxFee = maxFee || BigInt(9 * Math.pow(10, DECIMALS));
+  feeBasisPoint = feeBasisPoint || 100;
+  transferFeeConfigAuthority = transferFeeConfigAuthority || Keypair.generate();
+  withdrawWithheldAuthority = withdrawWithheldAuthority || Keypair.generate();
+  return {
+    extension: ExtensionType.TransferFeeConfig,
+    instruction: createInitializeTransferFeeConfigInstruction(
+      mint,
+      transferFeeConfigAuthority.publicKey,
+      withdrawWithheldAuthority.publicKey,
+      feeBasisPoint,
+      maxFee,
+      TOKEN_2022_PROGRAM_ID
+    ),
+  };
+}
+
 export async function createToken2022(
   banksClient: BanksClient,
   payer: Keypair,
-  extensions: ExtensionType[]
+  extensions: ExtensionWithInstruction[],
+  mintKeypair: Keypair
 ): Promise<PublicKey> {
-  const mintKeypair = Keypair.generate();
-  const maxFee = BigInt(9 * Math.pow(10, DECIMALS));
-  const feeBasisPoints = 100;
-  const transferFeeConfigAuthority = Keypair.generate();
-  const withdrawWithheldAuthority = Keypair.generate();
-
-  let mintLen = getMintLen(extensions);
+  let mintLen = getMintLen(extensions.map((ext) => ext.extension));
   const mintLamports = (await banksClient.getRent()).minimumBalance(
     BigInt(mintLen)
   );
@@ -41,14 +81,7 @@ export async function createToken2022(
       lamports: Number(mintLamports.toString()),
       programId: TOKEN_2022_PROGRAM_ID,
     }),
-    createInitializeTransferFeeConfigInstruction(
-      mintKeypair.publicKey,
-      transferFeeConfigAuthority.publicKey,
-      withdrawWithheldAuthority.publicKey,
-      feeBasisPoints,
-      maxFee,
-      TOKEN_2022_PROGRAM_ID
-    ),
+    ...extensions.map((ext) => ext.instruction),
     createInitializeMint2Instruction(
       mintKeypair.publicKey,
       DECIMALS,

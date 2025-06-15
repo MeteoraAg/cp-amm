@@ -12,7 +12,11 @@ import {
 } from "./bankrun-utils";
 import BN from "bn.js";
 import { ExtensionType } from "@solana/spl-token";
-import { createToken2022, mintToToken2022 } from "./bankrun-utils/token2022";
+import {
+  createToken2022,
+  createTransferFeeExtensionWithInstruction,
+  mintToToken2022,
+} from "./bankrun-utils/token2022";
 
 describe("Initialize customizable pool", () => {
   describe("SPL-Token", () => {
@@ -96,18 +100,32 @@ describe("Initialize customizable pool", () => {
     beforeEach(async () => {
       const root = Keypair.generate();
       context = await startTest(root);
-      const extensions = [ExtensionType.TransferFeeConfig];
+
+      const tokenAMintKeypair = Keypair.generate();
+      const tokenBMintKeypair = Keypair.generate();
+
+      tokenAMint = tokenAMintKeypair.publicKey;
+      tokenBMint = tokenBMintKeypair.publicKey;
+
+      const tokenAExtensions = [
+        createTransferFeeExtensionWithInstruction(tokenAMint),
+      ];
+      const tokenBExtensions = [
+        createTransferFeeExtensionWithInstruction(tokenBMint),
+      ];
       creator = await generateKpAndFund(context.banksClient, context.payer);
 
-      tokenAMint = await createToken2022(
+      await createToken2022(
         context.banksClient,
         context.payer,
-        extensions
+        tokenAExtensions,
+        tokenAMintKeypair
       );
-      tokenBMint = await createToken2022(
+      await createToken2022(
         context.banksClient,
         context.payer,
-        extensions
+        tokenBExtensions,
+        tokenBMintKeypair
       );
 
       await mintToToken2022(

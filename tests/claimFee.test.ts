@@ -24,7 +24,11 @@ import {
 } from "./bankrun-utils";
 import BN from "bn.js";
 import { ExtensionType } from "@solana/spl-token";
-import { createToken2022, mintToToken2022 } from "./bankrun-utils/token2022";
+import {
+  createToken2022,
+  createTransferFeeExtensionWithInstruction,
+  mintToToken2022,
+} from "./bankrun-utils/token2022";
 
 describe("Claim fee", () => {
   describe("SPL Token", () => {
@@ -213,27 +217,42 @@ describe("Claim fee", () => {
     let position: PublicKey;
     let inputTokenMint: PublicKey;
     let outputTokenMint: PublicKey;
+
     let operator: Keypair;
     let partner: Keypair;
 
     beforeEach(async () => {
       const root = Keypair.generate();
       context = await startTest(root);
-      const extensions = [ExtensionType.TransferFeeConfig];
+
+      const inputTokenMintKeypair = Keypair.generate();
+      const outputTokenMintKeypair = Keypair.generate();
+
+      inputTokenMint = inputTokenMintKeypair.publicKey;
+      outputTokenMint = outputTokenMintKeypair.publicKey;
+
+      const inputExtensions = [
+        createTransferFeeExtensionWithInstruction(inputTokenMint),
+      ];
+      const outputExtensions = [
+        createTransferFeeExtensionWithInstruction(outputTokenMint),
+      ];
       user = await generateKpAndFund(context.banksClient, context.payer);
       admin = await generateKpAndFund(context.banksClient, context.payer);
       partner = await generateKpAndFund(context.banksClient, context.payer);
       operator = await generateKpAndFund(context.banksClient, context.payer);
 
-      inputTokenMint = await createToken2022(
+      await createToken2022(
         context.banksClient,
         context.payer,
-        extensions
+        inputExtensions,
+        inputTokenMintKeypair
       );
-      outputTokenMint = await createToken2022(
+      await createToken2022(
         context.banksClient,
         context.payer,
-        extensions
+        outputExtensions,
+        outputTokenMintKeypair
       );
 
       await mintToToken2022(

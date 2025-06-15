@@ -1,26 +1,30 @@
-import { expect } from "chai";
-import { BanksClient, ProgramTestContext } from "solana-bankrun";
-import { generateKpAndFund, randomID, startTest } from "./bankrun-utils/common";
+import { AccountLayout } from "@solana/spl-token";
 import { Keypair, PublicKey } from "@solana/web3.js";
+import BN from "bn.js";
+import { expect } from "chai";
+import { ProgramTestContext } from "solana-bankrun";
 import {
   addLiquidity,
   AddLiquidityParams,
   createConfigIx,
   CreateConfigParams,
   createPosition,
+  createToken,
+  getPool,
   initializePool,
   InitializePoolParams,
-  MIN_LP_AMOUNT,
   MAX_SQRT_PRICE,
+  MIN_LP_AMOUNT,
   MIN_SQRT_PRICE,
-  getPool,
-  U64_MAX,
-  createToken,
   mintSplTokenTo,
+  U64_MAX,
 } from "./bankrun-utils";
-import BN from "bn.js";
-import { AccountLayout, ExtensionType } from "@solana/spl-token";
-import { createToken2022, mintToToken2022 } from "./bankrun-utils/token2022";
+import { generateKpAndFund, randomID, startTest } from "./bankrun-utils/common";
+import {
+  createToken2022,
+  createTransferFeeExtensionWithInstruction,
+  mintToToken2022,
+} from "./bankrun-utils/token2022";
 
 describe("Add liquidity", () => {
   describe("SPL Token", () => {
@@ -129,7 +133,6 @@ describe("Add liquidity", () => {
       };
 
       const result = await initializePool(context.banksClient, initPoolParams);
-
 
       pool = result.pool;
       position = await createPosition(
@@ -266,20 +269,35 @@ describe("Add liquidity", () => {
     beforeEach(async () => {
       const root = Keypair.generate();
       context = await startTest(root);
-      const extensions = [ExtensionType.TransferFeeConfig];
+
+      const tokenAMintKeypair = Keypair.generate();
+      const tokenBMintKeypair = Keypair.generate();
+
+      tokenAMint = tokenAMintKeypair.publicKey;
+      tokenBMint = tokenBMintKeypair.publicKey;
+
+      const tokenAExtensions = [
+        createTransferFeeExtensionWithInstruction(tokenAMint),
+      ];
+      const tokenBExtensions = [
+        createTransferFeeExtensionWithInstruction(tokenBMint),
+      ];
       user = await generateKpAndFund(context.banksClient, context.payer);
       admin = await generateKpAndFund(context.banksClient, context.payer);
       creator = await generateKpAndFund(context.banksClient, context.payer);
 
-      tokenAMint = await createToken2022(
+      await createToken2022(
         context.banksClient,
         context.payer,
-        extensions
+        tokenAExtensions,
+        tokenAMintKeypair
       );
-      tokenBMint = await createToken2022(
+
+      await createToken2022(
         context.banksClient,
         context.payer,
-        extensions
+        tokenBExtensions,
+        tokenBMintKeypair
       );
 
       await mintToToken2022(

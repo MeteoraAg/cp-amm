@@ -285,6 +285,34 @@ export async function createTokenBadge(
   expect(tokenBadgeState.tokenMint.toString()).eq(tokenMint.toString());
 }
 
+export type CloseTokenBadgeParams = {
+  tokenMint: PublicKey;
+  admin: Keypair;
+};
+
+export async function closeTokenBadge(
+  banksClient: BanksClient,
+  params: CloseTokenBadgeParams
+) {
+  const { tokenMint, admin } = params;
+  const program = createCpAmmProgram();
+  const tokenBadge = deriveTokenBadgeAddress(tokenMint);
+  const transaction = await program.methods
+    .closeTokenBadge()
+    .accountsPartial({
+      tokenBadge,
+      admin: admin.publicKey,
+      rentReceiver: admin.publicKey,
+    })
+    .transaction();
+  transaction.recentBlockhash = (await banksClient.getLatestBlockhash())[0];
+  transaction.sign(admin);
+
+  await processTransactionMaybeThrow(banksClient, transaction);
+  const tokenBadgeAccount = await banksClient.getAccount(tokenBadge);
+  expect(tokenBadgeAccount).to.be.null;
+}
+
 export type ClaimFeeOperatorParams = {
   admin: Keypair;
   operator: PublicKey;

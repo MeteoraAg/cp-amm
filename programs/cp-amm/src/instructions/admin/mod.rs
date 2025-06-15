@@ -22,3 +22,5 @@ pub mod ix_update_reward_funder;
 pub use ix_update_reward_funder::*;
 pub mod ix_update_reward_duration;
 pub use ix_update_reward_duration::*;
+pub mod ix_close_token_badge;
+pub use ix_close_token_badge::*;

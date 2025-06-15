@@ -19,7 +19,11 @@ import {
 } from "./bankrun-utils";
 import BN from "bn.js";
 import { ExtensionType } from "@solana/spl-token";
-import { createToken2022, mintToToken2022 } from "./bankrun-utils/token2022";
+import {
+  createToken2022,
+  createTransferFeeExtensionWithInstruction,
+  mintToToken2022,
+} from "./bankrun-utils/token2022";
 
 describe("Swap token", () => {
   describe("SPL Token", () => {
@@ -175,26 +179,41 @@ describe("Swap token", () => {
     let sqrtPrice: BN;
     let pool: PublicKey;
     let position: PublicKey;
+
     let inputTokenMint: PublicKey;
     let outputTokenMint: PublicKey;
 
     beforeEach(async () => {
       const root = Keypair.generate();
       context = await startTest(root);
-      const extensions = [ExtensionType.TransferFeeConfig];
+
+      const inputTokenMintKeypair = Keypair.generate();
+      const outputTokenMintKeypair = Keypair.generate();
+      inputTokenMint = inputTokenMintKeypair.publicKey;
+      outputTokenMint = outputTokenMintKeypair.publicKey;
+
+      const inputMintExtension = [
+        createTransferFeeExtensionWithInstruction(inputTokenMint),
+      ];
+      const outputMintExtension = [
+        createTransferFeeExtensionWithInstruction(outputTokenMint),
+      ];
+      const extensions = [...inputMintExtension, ...outputMintExtension];
       user = await generateKpAndFund(context.banksClient, context.payer);
       admin = await generateKpAndFund(context.banksClient, context.payer);
       creator = await generateKpAndFund(context.banksClient, context.payer);
 
-      inputTokenMint = await createToken2022(
+      await createToken2022(
         context.banksClient,
         context.payer,
-        extensions
+        inputMintExtension,
+        inputTokenMintKeypair
       );
-      outputTokenMint = await createToken2022(
+      await createToken2022(
         context.banksClient,
         context.payer,
-        extensions
+        outputMintExtension,
+        outputTokenMintKeypair
       );
 
       await mintToToken2022(
