@@ -37,6 +37,11 @@ impl VestingParameters {
         let cliff_point = self.get_cliff_point(current_point)?;
 
         require!(cliff_point >= current_point, PoolError::InvalidVestingInfo);
+
+        if cliff_point == current_point {
+            require!(self.number_of_period > 0, PoolError::InvalidVestingInfo);
+        }
+
         if self.number_of_period > 0 {
             require!(
                 self.period_frequency > 0 && self.liquidity_per_period > 0,
