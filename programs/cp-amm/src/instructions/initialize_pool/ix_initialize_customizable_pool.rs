@@ -344,7 +344,7 @@ pub fn handle_initialize_customizable_pool<'c: 'info, 'info>(
     let mut total_amount_b =
         calculate_transfer_fee_included_amount(&ctx.accounts.token_b_mint, token_b_amount)?.amount;
 
-    // require at least 1 lamport to prove onwership of token mints
+    // require at least 1 lamport to prove ownership of token mints
     total_amount_a = total_amount_a.max(1);
     total_amount_b = total_amount_b.max(1);
 
