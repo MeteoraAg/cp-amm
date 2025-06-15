@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use num::Integer;
 
 use crate::{
     constants::{BASIS_POINT_MAX, ONE_Q64},
@@ -8,6 +9,7 @@ use crate::{
 use super::safe_math::SafeMath;
 const MAX_EXPONENTIAL: u32 = 0x80000; // 1048576
 const SCALE_OFFSET: u32 = 64;
+const SCALE: u128 = 1 << SCALE_OFFSET;
 
 // cliff_fee_numerator * (1-reduction_factor/10_000)^passed_period
 pub fn get_fee_in_period(
@@ -20,16 +22,18 @@ pub fn get_fee_in_period(
     }
     // Make bin_step into Q64x64, and divided by BASIS_POINT_MAX. If bin_step = 1, we get 0.0001 in Q64x64
     let bps = u128::from(reduction_factor)
-        .safe_shl(SCALE_OFFSET.into())?
+        .safe_shl(SCALE_OFFSET)?
         .safe_div(BASIS_POINT_MAX.into())?;
     let base = ONE_Q64.safe_sub(bps)?;
     let result = pow(base, passed_period.into()).ok_or_else(|| PoolError::MathOverflow)?;
 
-    let (fee, _) = result
-        .safe_mul(cliff_fee_numerator.into())?
-        .overflowing_shr(SCALE_OFFSET);
+    let (fee, rem) = result.safe_mul(cliff_fee_numerator.into())?.div_rem(&SCALE);
 
-    let fee_numerator = u64::try_from(fee).map_err(|_| PoolError::TypeCastFailed)?;
+    let mut fee_numerator = u64::try_from(fee).map_err(|_| PoolError::TypeCastFailed)?;
+    if rem > 0 {
+        fee_numerator = fee_numerator.safe_add(1)?;
+    }
+
     Ok(fee_numerator)
 }
 
