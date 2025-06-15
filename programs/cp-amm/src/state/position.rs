@@ -107,7 +107,7 @@ impl Position {
         nft_mint: Pubkey,
         liquidity: u128,
     ) -> Result<()> {
-        pool_state.metrics.inc_position()?;
+        pool_state.metrics.increase_position()?;
         self.pool = pool;
         self.nft_mint = nft_mint;
         self.unlocked_liquidity = liquidity;

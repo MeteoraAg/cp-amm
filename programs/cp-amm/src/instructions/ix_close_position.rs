@@ -55,6 +55,9 @@ pub fn handle_close_position(ctx: Context<ClosePositionCtx>) -> Result<()> {
     let position = ctx.accounts.position.load()?;
     require!(position.is_empty()?, PoolError::PositionIsNotEmpty);
 
+    let mut pool = ctx.accounts.pool.load_mut()?;
+    pool.metrics.reduce_position()?;
+
     // burn
     token_2022::burn(
         CpiContext::new(
