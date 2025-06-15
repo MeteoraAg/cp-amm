@@ -64,25 +64,29 @@ pub fn handle_claim_partner_fee(
     let mut pool = ctx.accounts.pool.load_mut()?;
     let (token_a_amount, token_b_amount) = pool.claim_partner_fee(max_amount_a, max_amount_b)?;
 
-    transfer_from_pool(
-        ctx.accounts.pool_authority.to_account_info(),
-        &ctx.accounts.token_a_mint,
-        &ctx.accounts.token_a_vault,
-        &ctx.accounts.token_a_account,
-        &ctx.accounts.token_a_program,
-        token_a_amount,
-        ctx.bumps.pool_authority,
-    )?;
+    if max_amount_a > 0 {
+        transfer_from_pool(
+            ctx.accounts.pool_authority.to_account_info(),
+            &ctx.accounts.token_a_mint,
+            &ctx.accounts.token_a_vault,
+            &ctx.accounts.token_a_account,
+            &ctx.accounts.token_a_program,
+            token_a_amount,
+            ctx.bumps.pool_authority,
+        )?;
+    }
 
-    transfer_from_pool(
-        ctx.accounts.pool_authority.to_account_info(),
-        &ctx.accounts.token_b_mint,
-        &ctx.accounts.token_b_vault,
-        &ctx.accounts.token_b_account,
-        &ctx.accounts.token_b_program,
-        token_b_amount,
-        ctx.bumps.pool_authority,
-    )?;
+    if max_amount_b > 0 {
+        transfer_from_pool(
+            ctx.accounts.pool_authority.to_account_info(),
+            &ctx.accounts.token_b_mint,
+            &ctx.accounts.token_b_vault,
+            &ctx.accounts.token_b_account,
+            &ctx.accounts.token_b_program,
+            token_b_amount,
+            ctx.bumps.pool_authority,
+        )?;
+    }
 
     emit_cpi!(EvtClaimPartnerFee {
         pool: ctx.accounts.pool.key(),

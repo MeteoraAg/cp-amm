@@ -682,12 +682,16 @@ impl Pool {
         Ok(())
     }
 
-    pub fn claim_protocol_fee(&mut self) -> (u64, u64) {
-        let token_a_amount = self.protocol_a_fee;
-        let token_b_amount = self.protocol_b_fee;
-        self.protocol_a_fee = 0;
-        self.protocol_b_fee = 0;
-        (token_a_amount, token_b_amount)
+    pub fn claim_protocol_fee(
+        &mut self,
+        max_amount_a: u64,
+        max_amount_b: u64,
+    ) -> Result<(u64, u64)> {
+        let token_a_amount = self.protocol_a_fee.min(max_amount_a);
+        let token_b_amount = self.protocol_b_fee.min(max_amount_b);
+        self.protocol_a_fee = self.protocol_a_fee.safe_sub(token_a_amount)?;
+        self.protocol_b_fee = self.protocol_b_fee.safe_sub(token_b_amount)?;
+        Ok((token_a_amount, token_b_amount))
     }
 
     pub fn claim_partner_fee(

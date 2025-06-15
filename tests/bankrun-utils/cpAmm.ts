@@ -21,9 +21,11 @@ import {
   getMintCloseAuthority,
   MintCloseAuthorityLayout,
   MetadataPointerLayout,
+  unpackAccount,
 } from "@solana/spl-token";
 import { unpack } from "@solana/spl-token-metadata";
 import {
+  AccountInfo,
   clusterApiUrl,
   ComputeBudgetProgram,
   Connection,
@@ -365,6 +367,34 @@ export async function claimProtocolFee(
   const tokenBProgram = (await banksClient.getAccount(poolState.tokenBMint))
     .owner;
 
+  const tokenAVaultAccount = (await banksClient.getAccount(
+    poolState.tokenAVault
+  )) as AccountInfo<Buffer>;
+
+  const tokenBVaultAccount = (await banksClient.getAccount(
+    poolState.tokenBVault
+  )) as AccountInfo<Buffer>;
+
+  const tokenAVaultState = unpackAccount(
+    poolState.tokenAVault,
+    tokenAVaultAccount,
+    tokenAProgram
+  );
+
+  const tokenBVaultState = unpackAccount(
+    poolState.tokenBVault,
+    tokenBVaultAccount,
+    tokenBProgram
+  );
+
+  const protocolFeeA = tokenAVaultState.isFrozen
+    ? new BN(0)
+    : poolState.protocolAFee;
+
+  const protocolFeeB = tokenBVaultState.isFrozen
+    ? new BN(0)
+    : poolState.protocolBFee;
+
   const tokenAAccount = await getOrCreateAssociatedTokenAccount(
     banksClient,
     operator,
@@ -382,7 +412,7 @@ export async function claimProtocolFee(
   );
 
   const transaction = await program.methods
-    .claimProtocolFee()
+    .claimProtocolFee(protocolFeeA, protocolFeeB)
     .accountsPartial({
       poolAuthority,
       pool,
