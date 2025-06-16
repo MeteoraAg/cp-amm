@@ -21,6 +21,7 @@ import {
   getMintCloseAuthority,
   MintCloseAuthorityLayout,
   MetadataPointerLayout,
+  NATIVE_MINT,
 } from "@solana/spl-token";
 import { unpack } from "@solana/spl-token-metadata";
 import {
@@ -28,13 +29,16 @@ import {
   ComputeBudgetProgram,
   Connection,
   Keypair,
+  LAMPORTS_PER_SOL,
   PublicKey,
   SystemProgram,
+  SYSVAR_INSTRUCTIONS_PUBKEY,
+  Transaction,
 } from "@solana/web3.js";
 import { BanksClient } from "solana-bankrun";
 import CpAmmIDL from "../../target/idl/cp_amm.json";
 import { CpAmm } from "../../target/types/cp_amm";
-import { getOrCreateAssociatedTokenAccount } from "./token";
+import { getOrCreateAssociatedTokenAccount, wrapSOL } from "./token";
 import {
   deriveClaimFeeOperatorAddress,
   deriveConfigAddress,
@@ -102,10 +106,10 @@ export type DynamicFee = {
 
 export type BaseFee = {
   cliffFeeNumerator: BN;
-  numberOfPeriod: number;
-  periodFrequency: BN;
-  reductionFactor: BN;
-  feeSchedulerMode: number;
+  firstFactor: number;
+  secondFactor: BN;
+  thirdFactor: BN;
+  baseFeeMode: number;
 };
 
 export type PoolFees = {
@@ -205,17 +209,17 @@ export async function createConfigIx(
   expect(configState.poolFees.baseFee.cliffFeeNumerator.toNumber()).eq(
     params.poolFees.baseFee.cliffFeeNumerator.toNumber()
   );
-  expect(configState.poolFees.baseFee.numberOfPeriod).eq(
-    params.poolFees.baseFee.numberOfPeriod
+  expect(configState.poolFees.baseFee.firstFactor).eq(
+    params.poolFees.baseFee.firstFactor
   );
-  expect(configState.poolFees.baseFee.reductionFactor.toNumber()).eq(
-    params.poolFees.baseFee.reductionFactor.toNumber()
+  expect(configState.poolFees.baseFee.thirdFactor.toNumber()).eq(
+    params.poolFees.baseFee.thirdFactor.toNumber()
   );
-  expect(configState.poolFees.baseFee.feeSchedulerMode).eq(
-    params.poolFees.baseFee.feeSchedulerMode
+  expect(configState.poolFees.baseFee.baseFeeMode).eq(
+    params.poolFees.baseFee.baseFeeMode
   );
-  expect(configState.poolFees.baseFee.periodFrequency.toNumber()).eq(
-    params.poolFees.baseFee.periodFrequency.toNumber()
+  expect(configState.poolFees.baseFee.secondFactor.toNumber()).eq(
+    params.poolFees.baseFee.secondFactor.toNumber()
   );
   expect(configState.poolFees.protocolFeePercent).eq(
     params.poolFees.protocolFeePercent
@@ -732,7 +736,7 @@ export type PoolFeesParams = {
   dynamicFee: DynamicFee | null;
 };
 
-export type InitializeCustomizeablePoolParams = {
+export type InitializeCustomizablePoolParams = {
   payer: Keypair;
   creator: PublicKey;
   tokenAMint: PublicKey;
@@ -748,9 +752,9 @@ export type InitializeCustomizeablePoolParams = {
   activationPoint: BN | null;
 };
 
-export async function initializeCustomizeablePool(
+export async function initializeCustomizablePool(
   banksClient: BanksClient,
-  params: InitializeCustomizeablePoolParams
+  params: InitializeCustomizablePoolParams
 ): Promise<{ pool: PublicKey; position: PublicKey }> {
   const {
     tokenAMint,
@@ -788,12 +792,17 @@ export async function initializeCustomizeablePool(
     true,
     tokenAProgram
   );
-  const payerTokenB = getAssociatedTokenAddressSync(
+  const payerTokenB = await getOrCreateAssociatedTokenAccount(
+    banksClient,
+    payer,
     tokenBMint,
     payer.publicKey,
-    true,
     tokenBProgram
   );
+
+  if (tokenBMint.equals(NATIVE_MINT)) {
+    await wrapSOL(banksClient, payer, new BN(LAMPORTS_PER_SOL));
+  }
 
   const transaction = await program.methods
     .initializeCustomizablePool({
@@ -1560,7 +1569,10 @@ export type SwapParams = {
   referralTokenAccount: PublicKey | null;
 };
 
-export async function swap(banksClient: BanksClient, params: SwapParams) {
+export async function swapInstruction(
+  banksClient: BanksClient,
+  params: SwapParams
+): Promise<Transaction> {
   const {
     payer,
     pool,
@@ -1616,10 +1628,26 @@ export async function swap(banksClient: BanksClient, params: SwapParams) {
       tokenBMint,
       referralTokenAccount,
     })
+    .remainingAccounts(
+      // TODO should check condition to add this in remaning accounts
+      [
+        {
+          isSigner: false,
+          isWritable: false,
+          pubkey: SYSVAR_INSTRUCTIONS_PUBKEY,
+        },
+      ]
+    )
     .transaction();
 
+  return transaction;
+}
+
+export async function swap(banksClient: BanksClient, params: SwapParams) {
+  const transaction = await swapInstruction(banksClient, params);
+
   transaction.recentBlockhash = (await banksClient.getLatestBlockhash())[0];
-  transaction.sign(payer);
+  transaction.sign(params.payer);
 
   await processTransactionMaybeThrow(banksClient, transaction);
 }
@@ -1723,20 +1751,6 @@ export async function getConfig(
   const program = createCpAmmProgram();
   const account = await banksClient.getAccount(config);
   return program.coder.accounts.decode("config", Buffer.from(account.data));
-}
-
-export function getStakeProgramErrorCodeHexString(errorMessage: String) {
-  const error = CpAmmIDL.errors.find(
-    (e) =>
-      e.name.toLowerCase() === errorMessage.toLowerCase() ||
-      e.msg.toLowerCase() === errorMessage.toLowerCase()
-  );
-
-  if (!error) {
-    throw new Error(`Unknown CP AMM error message / name: ${errorMessage}`);
-  }
-
-  return "0x" + error.code.toString(16);
 }
 
 export async function getTokenBadge(

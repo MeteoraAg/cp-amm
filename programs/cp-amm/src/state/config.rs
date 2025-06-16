@@ -53,11 +53,13 @@ const_assert_eq!(PoolFeesConfig::INIT_SPACE, 128);
 #[derive(Debug, InitSpace, Default)]
 pub struct BaseFeeConfig {
     pub cliff_fee_numerator: u64,
-    pub fee_scheduler_mode: u8,
+    // In fee scheduler first_factor: number_of_period, second_factor: period_frequency, third_factor: reduction_factor
+    // in rate limiter: first_factor: fee_increment_bps, second_factor: max_limiter_duration, third_factor: reference_amount
+    pub base_fee_mode: u8,
     pub padding: [u8; 5],
-    pub number_of_period: u16,
-    pub period_frequency: u64,
-    pub reduction_factor: u64,
+    pub first_factor: u16,
+    pub second_factor: u64,
+    pub third_factor: u64,
 }
 
 const_assert_eq!(BaseFeeConfig::INIT_SPACE, 32);
@@ -66,20 +68,20 @@ impl BaseFeeConfig {
     fn to_base_fee_parameters(&self) -> BaseFeeParameters {
         BaseFeeParameters {
             cliff_fee_numerator: self.cliff_fee_numerator,
-            number_of_period: self.number_of_period,
-            period_frequency: self.period_frequency,
-            reduction_factor: self.reduction_factor,
-            fee_scheduler_mode: self.fee_scheduler_mode,
+            first_factor: self.first_factor,
+            second_factor: self.second_factor,
+            third_factor: self.third_factor,
+            base_fee_mode: self.base_fee_mode,
         }
     }
 
     fn to_base_fee_struct(&self) -> BaseFeeStruct {
         BaseFeeStruct {
             cliff_fee_numerator: self.cliff_fee_numerator,
-            number_of_period: self.number_of_period,
-            period_frequency: self.period_frequency,
-            reduction_factor: self.reduction_factor,
-            fee_scheduler_mode: self.fee_scheduler_mode,
+            first_factor: self.first_factor,
+            second_factor: self.second_factor,
+            third_factor: self.third_factor,
+            base_fee_mode: self.base_fee_mode,
             ..Default::default()
         }
     }

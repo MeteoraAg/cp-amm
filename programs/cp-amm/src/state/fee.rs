@@ -5,11 +5,8 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 use static_assertions::const_assert_eq;
 
 use crate::{
-    constants::{
-        fee::{FEE_DENOMINATOR, MAX_FEE_NUMERATOR},
-        BASIS_POINT_MAX, ONE_Q64,
-    },
-    fee_math::get_fee_in_period,
+    base_fee::{get_base_fee_handler, FeeRateLimiter},
+    constants::{fee::FEE_DENOMINATOR, BASIS_POINT_MAX, ONE_Q64},
     params::swap::TradeDirection,
     safe_math::SafeMath,
     u128x128_math::Rounding,
@@ -43,11 +40,13 @@ pub struct FeeOnAmountResult {
 )]
 
 // https://www.desmos.com/calculator/oxdndn2xdx
-pub enum FeeSchedulerMode {
+pub enum BaseFeeMode {
     // fee = cliff_fee_numerator - passed_period * reduction_factor
-    Linear,
+    FeeSchedulerLinear,
     // fee = cliff_fee_numerator * (1-reduction_factor/10_000)^passed_period
-    Exponential,
+    FeeSchedulerExponential,
+    // rate limiter
+    RateLimiter,
 }
 
 #[zero_copy]
@@ -88,67 +87,73 @@ const_assert_eq!(PoolFeesStruct::INIT_SPACE, 160);
 #[derive(Debug, InitSpace, Default)]
 pub struct BaseFeeStruct {
     pub cliff_fee_numerator: u64,
-    pub fee_scheduler_mode: u8,
+    // In fee scheduler first_factor: number_of_period, second_factor: period_frequency, third_factor: reduction_factor
+    // in rate limiter: first_factor: fee_increment_bps, second_factor: max_limiter_duration, third_factor: reference_amount
+    pub base_fee_mode: u8,
     pub padding_0: [u8; 5],
-    pub number_of_period: u16,
-    pub period_frequency: u64,
-    pub reduction_factor: u64,
+    pub first_factor: u16,
+    pub second_factor: u64,
+    pub third_factor: u64,
     pub padding_1: u64,
 }
 
 const_assert_eq!(BaseFeeStruct::INIT_SPACE, 40);
 
 impl BaseFeeStruct {
-    pub fn get_max_base_fee_numerator(&self) -> u64 {
-        self.cliff_fee_numerator
+    pub fn get_fee_rate_limiter(&self) -> Result<FeeRateLimiter> {
+        let base_fee_mode =
+            BaseFeeMode::try_from(self.base_fee_mode).map_err(|_| PoolError::InvalidBaseFeeMode)?;
+        if base_fee_mode == BaseFeeMode::RateLimiter {
+            Ok(FeeRateLimiter {
+                cliff_fee_numerator: self.cliff_fee_numerator,
+                fee_increment_bps: self.first_factor,
+                max_limiter_duration: self.second_factor,
+                reference_amount: self.third_factor,
+            })
+        } else {
+            Err(PoolError::InvalidFeeRateLimiter.into())
+        }
     }
-    pub fn get_min_base_fee_numerator(&self) -> Result<u64> {
-        // trick to force current_point < activation_point
-        self.get_current_base_fee_numerator(0, 1)
-    }
+
     pub fn get_current_base_fee_numerator(
         &self,
         current_point: u64,
         activation_point: u64,
+        amount: u64,
+        trade_direction: TradeDirection,
     ) -> Result<u64> {
-        if self.period_frequency == 0 {
-            return Ok(self.cliff_fee_numerator);
-        }
-        // can trade before activation point, so it is alpha-vault, we use min fee
-        let period = if current_point < activation_point {
-            self.number_of_period.into()
-        } else {
-            let period = current_point
-                .safe_sub(activation_point)?
-                .safe_div(self.period_frequency)?;
-            period.min(self.number_of_period.into())
-        };
-        let fee_scheduler_mode = FeeSchedulerMode::try_from(self.fee_scheduler_mode)
-            .map_err(|_| PoolError::TypeCastFailed)?;
+        let base_fee_handler = get_base_fee_handler(
+            self.cliff_fee_numerator,
+            self.first_factor,
+            self.second_factor,
+            self.third_factor,
+            self.base_fee_mode,
+        )?;
 
-        match fee_scheduler_mode {
-            FeeSchedulerMode::Linear => {
-                let fee_numerator = self
-                    .cliff_fee_numerator
-                    .safe_sub(period.safe_mul(self.reduction_factor.into())?)?;
-                Ok(fee_numerator)
-            }
-            FeeSchedulerMode::Exponential => {
-                let period = u16::try_from(period).map_err(|_| PoolError::MathOverflow)?;
-                let fee_numerator =
-                    get_fee_in_period(self.cliff_fee_numerator, self.reduction_factor, period)?;
-                Ok(fee_numerator)
-            }
-        }
+        base_fee_handler.get_base_fee_numerator(
+            current_point,
+            activation_point,
+            trade_direction,
+            amount,
+        )
     }
 }
 
 impl PoolFeesStruct {
     // in numerator
-    pub fn get_total_trading_fee(&self, current_point: u64, activation_point: u64) -> Result<u128> {
-        let base_fee_numerator = self
-            .base_fee
-            .get_current_base_fee_numerator(current_point, activation_point)?;
+    pub fn get_total_trading_fee(
+        &self,
+        current_point: u64,
+        activation_point: u64,
+        amount: u64,
+        trade_direction: TradeDirection,
+    ) -> Result<u128> {
+        let base_fee_numerator = self.base_fee.get_current_base_fee_numerator(
+            current_point,
+            activation_point,
+            amount,
+            trade_direction,
+        )?;
         let total_fee_numerator = self
             .dynamic_fee
             .get_variable_fee()?
@@ -162,13 +167,17 @@ impl PoolFeesStruct {
         has_referral: bool,
         current_point: u64,
         activation_point: u64,
+        trade_direction: TradeDirection,
+        max_fee_numerator: u64,
     ) -> Result<FeeOnAmountResult> {
-        let trade_fee_numerator = self.get_total_trading_fee(current_point, activation_point)?;
-        let trade_fee_numerator = if trade_fee_numerator > MAX_FEE_NUMERATOR.into() {
-            MAX_FEE_NUMERATOR
+        let trade_fee_numerator =
+            self.get_total_trading_fee(current_point, activation_point, amount, trade_direction)?;
+        let trade_fee_numerator = if trade_fee_numerator > max_fee_numerator.into() {
+            max_fee_numerator
         } else {
             trade_fee_numerator.try_into().unwrap()
         };
+
         let lp_fee: u64 =
             safe_mul_div_cast_u64(amount, trade_fee_numerator, FEE_DENOMINATOR, Rounding::Up)?;
         // update amount

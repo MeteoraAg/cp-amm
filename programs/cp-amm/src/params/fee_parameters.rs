@@ -1,14 +1,14 @@
 //! Fees module includes information about fee charges
+use crate::activation_handler::ActivationType;
+use crate::base_fee::get_base_fee_handler;
 use crate::constants::fee::{
-    CUSTOMIZABLE_HOST_FEE_PERCENT, CUSTOMIZABLE_PROTOCOL_FEE_PERCENT, FEE_DENOMINATOR,
-    MAX_BASIS_POINT, MAX_FEE_NUMERATOR, MIN_FEE_NUMERATOR,
+    CUSTOMIZABLE_HOST_FEE_PERCENT, CUSTOMIZABLE_PROTOCOL_FEE_PERCENT, MAX_BASIS_POINT,
 };
 use crate::constants::{BASIS_POINT_MAX, BIN_STEP_BPS_DEFAULT, BIN_STEP_BPS_U128_DEFAULT, U24_MAX};
 use crate::error::PoolError;
-use crate::fee_math::get_fee_in_period;
 use crate::safe_math::SafeMath;
-use crate::state::fee::{BaseFeeStruct, DynamicFeeStruct, FeeSchedulerMode, PoolFeesStruct};
-use crate::state::{BaseFeeConfig, DynamicFeeConfig, PoolFeesConfig};
+use crate::state::fee::{BaseFeeStruct, DynamicFeeStruct, PoolFeesStruct};
+use crate::state::{BaseFeeConfig, CollectFeeMode, DynamicFeeConfig, PoolFeesConfig};
 use anchor_lang::prelude::*;
 
 use super::swap::TradeDirection;
@@ -31,56 +31,37 @@ pub struct PoolFeeParameters {
 #[derive(Copy, Clone, Debug, AnchorSerialize, AnchorDeserialize, InitSpace, Default)]
 pub struct BaseFeeParameters {
     pub cliff_fee_numerator: u64,
-    pub number_of_period: u16,
-    pub period_frequency: u64,
-    pub reduction_factor: u64,
-    pub fee_scheduler_mode: u8,
+    pub first_factor: u16,
+    pub second_factor: u64,
+    pub third_factor: u64,
+    pub base_fee_mode: u8,
 }
 
 impl BaseFeeParameters {
-    pub fn get_max_base_fee_numerator(&self) -> u64 {
-        self.cliff_fee_numerator
-    }
-    pub fn get_min_base_fee_numerator(&self) -> Result<u64> {
-        let fee_scheduler_mode = FeeSchedulerMode::try_from(self.fee_scheduler_mode)
-            .map_err(|_| PoolError::TypeCastFailed)?;
-        match fee_scheduler_mode {
-            FeeSchedulerMode::Linear => {
-                let fee_numerator = self.cliff_fee_numerator.safe_sub(
-                    self.reduction_factor
-                        .safe_mul(self.number_of_period.into())?,
-                )?;
-                Ok(fee_numerator)
-            }
-            FeeSchedulerMode::Exponential => {
-                let fee_numerator = get_fee_in_period(
-                    self.cliff_fee_numerator,
-                    self.reduction_factor,
-                    self.number_of_period,
-                )?;
-                Ok(fee_numerator)
-            }
-        }
-    }
+    fn validate(
+        &self,
+        collect_fee_mode: CollectFeeMode,
+        activation_type: ActivationType,
+    ) -> Result<()> {
+        let base_fee_handler = get_base_fee_handler(
+            self.cliff_fee_numerator,
+            self.first_factor,
+            self.second_factor,
+            self.third_factor,
+            self.base_fee_mode,
+        )?;
+        base_fee_handler.validate(collect_fee_mode, activation_type)?;
 
-    fn validate(&self) -> Result<()> {
-        let min_fee_numerator = self.get_min_base_fee_numerator()?;
-        let max_fee_numerator = self.get_max_base_fee_numerator();
-        validate_fee_fraction(min_fee_numerator, FEE_DENOMINATOR)?;
-        validate_fee_fraction(max_fee_numerator, FEE_DENOMINATOR)?;
-        require!(
-            min_fee_numerator >= MIN_FEE_NUMERATOR && max_fee_numerator <= MAX_FEE_NUMERATOR,
-            PoolError::ExceedMaxFeeBps
-        );
         Ok(())
     }
+
     fn to_base_fee_struct(&self) -> BaseFeeStruct {
         BaseFeeStruct {
             cliff_fee_numerator: self.cliff_fee_numerator,
-            number_of_period: self.number_of_period,
-            period_frequency: self.period_frequency,
-            reduction_factor: self.reduction_factor,
-            fee_scheduler_mode: self.fee_scheduler_mode,
+            first_factor: self.first_factor,
+            second_factor: self.second_factor,
+            third_factor: self.third_factor,
+            base_fee_mode: self.base_fee_mode,
             ..Default::default()
         }
     }
@@ -88,10 +69,10 @@ impl BaseFeeParameters {
     pub fn to_base_fee_config(&self) -> BaseFeeConfig {
         BaseFeeConfig {
             cliff_fee_numerator: self.cliff_fee_numerator,
-            number_of_period: self.number_of_period,
-            period_frequency: self.period_frequency,
-            reduction_factor: self.reduction_factor,
-            fee_scheduler_mode: self.fee_scheduler_mode,
+            first_factor: self.first_factor,
+            second_factor: self.second_factor,
+            third_factor: self.third_factor,
+            base_fee_mode: self.base_fee_mode,
             ..Default::default()
         }
     }
@@ -265,10 +246,21 @@ pub fn to_bps(numerator: u128, denominator: u128) -> Option<u64> {
     bps.try_into().ok()
 }
 
+pub fn to_numerator(bps: u128, denominator: u128) -> Result<u64> {
+    let numerator = bps
+        .safe_mul(denominator.into())?
+        .safe_div(MAX_BASIS_POINT.into())?;
+    Ok(u64::try_from(numerator).map_err(|_| PoolError::TypeCastFailed)?)
+}
+
 impl PoolFeeParameters {
     /// Validate that the fees are reasonable
-    pub fn validate(&self) -> Result<()> {
-        self.base_fee.validate()?;
+    pub fn validate(
+        &self,
+        collect_fee_mode: CollectFeeMode,
+        activation_type: ActivationType,
+    ) -> Result<()> {
+        self.base_fee.validate(collect_fee_mode, activation_type)?;
         validate_fee_fraction(self.protocol_fee_percent.into(), 100)?;
         validate_fee_fraction(self.partner_fee_percent.into(), 100)?;
         validate_fee_fraction(self.referral_fee_percent.into(), 100)?;
